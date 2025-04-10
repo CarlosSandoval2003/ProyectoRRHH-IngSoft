@@ -1,17 +1,19 @@
+// /app.js
 const express = require('express');
-const cors = require('cors');
 const app = express();
-const empleadoRoutes = require('./routes/empleadoRoutes');
-const usuarioRoutes = require('./routes/usuarioRoutes');
-const nominaRoutes = require('./routes/nominaRoutes');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const usuarioRoutes = require('./routes/usuarioRoutes');  // Importamos las rutas de usuario
 
-app.use(cors());
-app.use(express.json());
+// Configuración de middlewares
+app.use(cors());  // Para habilitar CORS si lo necesitas
+app.use(bodyParser.json());  // Para que Express pueda manejar JSON
 
-app.use('/api/empleados', empleadoRoutes);
+// Usar las rutas de usuario
 app.use('/api/usuarios', usuarioRoutes);
-app.use('/api/nominas', nominaRoutes);
 
-app.listen(3001, () => {
-  console.log('Servidor corriendo en http://localhost:3001');
+// Iniciar el servidor
+const port = process.env.PORT || 3001;
+app.listen(port, () => {
+  console.log(`Servidor corriendo en el puerto ${port}`);
 });
