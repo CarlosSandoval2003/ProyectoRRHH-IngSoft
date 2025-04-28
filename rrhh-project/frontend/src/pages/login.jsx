@@ -1,10 +1,11 @@
-// /components/Login.jsx
 import { useState } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const navigate = useNavigate();
 
   const handleLogin = async () => {
     try {
@@ -13,11 +14,11 @@ export default function Login() {
         password
       });
 
-      // Guardamos el token en localStorage
       localStorage.setItem('token', res.data.token);
-
-      // Mostramos el mensaje de bienvenida con el rol
       alert(`Bienvenido ${res.data.usuario}, tu rol es: ${res.data.rol}`);
+
+      // 🔁 Redirigir al dashboard
+      navigate('/dashboard');
 
     } catch (err) {
       alert('Login fallido');

@@ -1,4 +1,3 @@
-// /middlewares/authMiddleware.js
 const jwt = require('jsonwebtoken'); // Necesitas instalar jsonwebtoken
 
 const verificarAutenticacion = (req, res, next) => {
