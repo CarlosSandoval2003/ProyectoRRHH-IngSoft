@@ -18,6 +18,7 @@ function DetalleNominas() {
 
   useEffect(() => {
     obtenerDetalleNomina();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const obtenerDetalleNomina = async () => {
