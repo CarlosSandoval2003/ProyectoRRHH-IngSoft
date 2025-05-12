@@ -71,3 +71,70 @@ exports.eliminarEmpleado = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+
+exports.obtenerHorasExtrasMesActual = async (req, res) => {
+  try {
+    const data = await Empleado.obtenerHorasExtrasMesActual(req.params.id);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.listarHorasExtraMesActual = async (req, res) => {
+  try {
+    const data = await Empleado.listarHorasExtraMesActual(req.params.id);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.insertarHoraExtra = async (req, res) => {
+  const { fecha, horas } = req.body;
+  const id = req.params.id;
+  try {
+    const data = await Empleado.insertarHoraExtra(id, fecha, horas);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.listarDiasTrabajadosMesActual = async (req, res) => {
+  try {
+    const fechas = await Empleado.listarDiasTrabajadosMesActual(req.params.id);
+    res.json(fechas);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.listarPuestosPorDepartamento = async (req, res) => {
+  try {
+    const datos = await Empleado.listarPuestosPorDepartamento(req.params.id);
+    res.json(datos);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+
+exports.guardarDiasTrabajadosMesActual = async (req, res) => {
+  const { id } = req.params;
+  const fechas = req.body.fechas || []; // array de strings 'YYYY-MM-DD'
+
+  try {
+    await Empleado.eliminarDiasTrabajadosMesActual(id);
+
+    for (const fecha of fechas) {
+      await Empleado.insertarDiaTrabajado(id, fecha);
+    }
+
+    res.json({ msg: '✅ Días trabajados actualizados correctamente.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};

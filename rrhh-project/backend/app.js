@@ -13,6 +13,7 @@ const usuarioRoutes = require('./routes/usuarioRoutes');
 const nominaRoutes = require('./routes/nominaRoutes'); // ✅ agregar esto
 const empleadoRoutes = require('./routes/empleadoRoutes');
 app.use('/api/empleados', empleadoRoutes);
+
 app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/nomina', nominaRoutes); // ✅ montar las rutas
 

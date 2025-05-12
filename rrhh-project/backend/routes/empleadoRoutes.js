@@ -6,6 +6,18 @@ const empCtrl = require('../controllers/empleadoController');
 router.get('/puestos',       empCtrl.listarPuestos);
 router.get('/departamentos', empCtrl.listarDepartamentos);
 router.get('/estados',       empCtrl.listarEstados);
+router.get('/puestos/:id', empCtrl.listarPuestosPorDepartamento);
+
+
+
+// 💡 ESTA DEBE IR ANTES DE /:id
+router.get('/horasextras/:id', empCtrl.obtenerHorasExtrasMesActual);
+router.get('/horasextras/listar/:id', empCtrl.listarHorasExtraMesActual);
+router.post('/horasextras/insertar/:id', empCtrl.insertarHoraExtra);
+
+router.get('/diastrabajados/:id', empCtrl.listarDiasTrabajadosMesActual);
+router.post('/diastrabajados/:id', empCtrl.guardarDiasTrabajadosMesActual);
+
 
 // CRUD Empleados via sp_gestion_empleado
 router.get('/',       empCtrl.listarEmpleados);

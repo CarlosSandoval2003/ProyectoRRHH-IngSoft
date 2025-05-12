@@ -21,6 +21,7 @@ export default function DetalleEmpleado() {
   return (
     <div className="contenedor-empleados">
       <div className="botonera-superior">
+        <button className="btn" disabled>🛠 Gestionar Horas Extra</button><br />
         <button className="btn volver" onClick={() => navigate(-1)}>🔙 Volver</button>
       </div>
 
