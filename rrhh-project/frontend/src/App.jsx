@@ -7,6 +7,8 @@ import DetalleNominas from './pages/DetalleNominas';
 import { DetalleEmpleado, EditarEmpleado, NuevoEmpleado } from './pages/EmpleadoForms';
 import Empleados from './pages/Empleados';
 
+import MantenimientoUsuarioList from './pages/MantenimientoUsuarioList';
+import MantenimientoUsuarioForm from './pages/MantenimientoUsuarioForm';
 // import otros componentes cuando los tengas
 
 function App() {
@@ -24,6 +26,9 @@ function App() {
         <Route path="/empleados/editar/:id" element={<EditarEmpleado />} />
         <Route path="/empleados/:id" element={<DetalleEmpleado />} />
 
+   <Route path="/usuarios"        element={<MantenimientoUsuarioList />} />
+        <Route path="/usuarios/nuevo"  element={<MantenimientoUsuarioForm />} />
+        <Route path="/usuarios/:id"    element={<MantenimientoUsuarioForm />} />
       </Routes>
     </BrowserRouter>
   );
