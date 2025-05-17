@@ -1,27 +1,31 @@
 // src/pages/MantenimientoUsuarioList.jsx
 import React, { useState, useEffect } from 'react';
 import api from '../api';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import './MantenimientoUsuario.css';
 
 const MantenimientoUsuarioList = () => {
   const [usuarios, setUsuarios] = useState([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    api.get('/usuarios')
+    api.get('/usuariosm')
       .then(({ data }) => setUsuarios(data))
       .catch(err => console.error('Error al listar usuarios:', err));
   }, []);
 
   const handleDelete = id => {
     if (!window.confirm('¿Eliminar usuario?')) return;
-    api.delete(`/usuarios/${id}`)
+    api.delete(`/usuariosm/${id}`)
       .then(() => setUsuarios(prev => prev.filter(u => u.id_usuario !== id)))
       .catch(err => console.error('Error al eliminar usuario:', err));
   };
 
   return (
     <div className="page-usuarios">
+      <button className="btn-volver" onClick={() => navigate('/dashboard')}>⬅️ Volver</button>
+      <h2></h2>
+      <button className="btn-volver" onClick={() => navigate('/dashboard')}>🏠 Inicio</button>
       <h2>Lista de Usuarios</h2>
       <Link to="/usuarios/nuevo" className="btn">Crear usuario</Link>
       <table>

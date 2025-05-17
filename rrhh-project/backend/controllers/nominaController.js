@@ -34,13 +34,14 @@ exports.getListadoNominas = (req, res) => {
 
 
 exports.generarNominaMasiva = (req, res) => {
-  const { fecha_nomina, id_tipo_nomina, id_estado, fecha_inicio, fecha_fin } = req.body;
+  const { fecha_nomina, id_tipo_nomina, id_estado, mes, anio } = req.body;
 
-  if (!fecha_nomina || !id_tipo_nomina || !id_estado || !fecha_inicio || !fecha_fin) {
-    return res.status(400).json({ mensaje: "Todos los campos son obligatorios." });
-  }
+if (!fecha_nomina || !id_tipo_nomina || !id_estado || !mes || !anio) {
+  return res.status(400).json({ mensaje: "Todos los campos son obligatorios." });
+}
 
-  const params = [fecha_nomina, id_tipo_nomina, id_estado, fecha_inicio, fecha_fin];
+const params = [fecha_nomina, id_tipo_nomina, id_estado, mes, anio];
+
 
   NominaModel.generarNominaTodos(params, (err, results) => {
     if (err) {
@@ -52,13 +53,14 @@ exports.generarNominaMasiva = (req, res) => {
 };
 
 exports.generarNominaPorDepartamento = (req, res) => {
-  const { id_departamento, fecha_nomina, id_tipo_nomina, id_estado, fecha_inicio, fecha_fin } = req.body;
+  const { id_departamento, fecha_nomina, id_tipo_nomina, id_estado, mes, anio } = req.body;
 
-  if (!id_departamento || !fecha_nomina || !id_tipo_nomina || !id_estado || !fecha_inicio || !fecha_fin) {
-    return res.status(400).json({ mensaje: "Todos los campos son obligatorios." });
-  }
+if (!id_departamento || !fecha_nomina || !id_tipo_nomina || !id_estado || !mes || !anio) {
+  return res.status(400).json({ mensaje: "Todos los campos son obligatorios." });
+}
 
-  const params = [id_departamento, fecha_nomina, id_tipo_nomina, id_estado, fecha_inicio, fecha_fin];
+const params = [id_departamento, fecha_nomina, id_tipo_nomina, id_estado, mes, anio];
+
 
   NominaModel.generarNominaPorDepartamento(params, (err, results) => {
     if (err) {
@@ -120,28 +122,38 @@ exports.buscarEmpleados = (req, res) => {
 
 exports.generarNominaEmpleado = (req, res) => {
   const {
-    id_empleado,
-    id_tipo_nomina,
-    id_estado,
-    fecha_nomina,
-    fecha_inicio,
-    fecha_fin
-  } = req.body;
+  id_empleado, id_tipo_nomina, id_estado, fecha_nomina, mes, anio, id_departamento
+} = req.body;
 
-  const params = [
-    id_empleado,
-    fecha_nomina,
-    id_tipo_nomina,
-    id_estado,
-    fecha_inicio,
-    fecha_fin
-  ];
+if (!id_empleado || !fecha_nomina || !id_tipo_nomina || !id_estado || !mes || !anio) {
+  return res.status(400).json({ mensaje: "Todos los campos son obligatorios." });
+}
 
-  NominaModel.generarNominaEmpleado(params, (err, results) => {
-    if (err) return res.status(500).json({ error: err });
-    res.json({ msg: 'Nómina generada exitosamente', results });
-  });
+const params = [id_empleado, fecha_nomina, id_tipo_nomina, id_estado, mes, anio, id_departamento];
+NominaModel.generarNominaEmpleado(params, (err, results) => {
+  if (err) return res.status(500).json({ error: err });
+  res.json({ msg: 'Nómina generada exitosamente', results });
+});
+
+
+
 
 
   
+};
+
+exports.buscarNominasPorEmpleado = (req, res) => {
+  const { termino } = req.params;
+  NominaModel.buscarNominasPorEmpleado(termino, (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(results);
+  });
+};
+
+exports.getNominasEmpleado = (req, res) => {
+  const { id_empleado } = req.params;
+  NominaModel.obtenerNominasPorEmpleado(id_empleado, (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(results);
+  });
 };

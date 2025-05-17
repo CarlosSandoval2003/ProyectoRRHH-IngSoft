@@ -13,11 +13,19 @@ const MantenimientoUsuarioForm = () => {
     id_rol: ''
   });
   const [loading, setLoading] = useState(false);
+  const [roles, setRoles] = useState([]);
+
+  useEffect(() => {
+  api.get('/usuariosm/roles/listar')
+    .then(({ data }) => setRoles(data))
+    .catch(err => console.error('Error al cargar roles:', err));
+}, []);
+
 
   useEffect(() => {
     if (id) {
       setLoading(true);
-      api.get(`/usuarios/${id}`)
+      api.get(`/usuariosm/${id}`)
         .then(({ data }) => {
           setForm({
             username: data.username,
@@ -39,10 +47,10 @@ const MantenimientoUsuarioForm = () => {
     e.preventDefault();
     try {
       if (id) {
-        await api.put(`/usuarios/${id}`, form);
+        await api.put(`/usuariosm/${id}`, form);
         alert('Usuario actualizado.');
       } else {
-        await api.post('/usuarios', form);
+        await api.post('/usuariosm', form);
         alert('Usuario creado.');
       }
       navigate('/usuarios');
@@ -79,14 +87,21 @@ const MantenimientoUsuarioForm = () => {
           />
         </div>
         <div>
-          <label>Rol (ID):</label>
-          <input
-            name="id_rol"
-            value={form.id_rol}
-            onChange={handleChange}
-            required
-          />
-        </div>
+  <label>Rol:</label>
+  <select
+    name="id_rol"
+    value={form.id_rol}
+    onChange={handleChange}
+    required
+  >
+    <option value="">-- Selecciona un rol --</option>
+    {roles.map(rol => (
+      <option key={rol.id_rol} value={rol.id_rol}>{rol.nombre_rol}</option>
+    ))}
+  </select>
+</div>
+
+
         <button type="submit" className="btn">
           {id ? 'Actualizar Usuario' : 'Crear Usuario'}
         </button>

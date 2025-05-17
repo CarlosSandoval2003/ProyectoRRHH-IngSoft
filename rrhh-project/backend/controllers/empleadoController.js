@@ -102,14 +102,6 @@ exports.insertarHoraExtra = async (req, res) => {
   }
 };
 
-exports.listarDiasTrabajadosMesActual = async (req, res) => {
-  try {
-    const fechas = await Empleado.listarDiasTrabajadosMesActual(req.params.id);
-    res.json(fechas);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
 
 exports.listarPuestosPorDepartamento = async (req, res) => {
   try {
@@ -121,20 +113,49 @@ exports.listarPuestosPorDepartamento = async (req, res) => {
 };
 
 
-
-exports.guardarDiasTrabajadosMesActual = async (req, res) => {
+exports.listarDiasCalendarioMesActual = async (req, res) => {
   const { id } = req.params;
-  const fechas = req.body.fechas || []; // array de strings 'YYYY-MM-DD'
+  const mes = parseInt(req.query.mes) || new Date().getMonth() + 1;
+  const anio = parseInt(req.query.anio) || new Date().getFullYear();
 
   try {
-    await Empleado.eliminarDiasTrabajadosMesActual(id);
-
-    for (const fecha of fechas) {
-      await Empleado.insertarDiaTrabajado(id, fecha);
-    }
-
-    res.json({ msg: '✅ Días trabajados actualizados correctamente.' });
+    const fechas = await Empleado.listarDiasCalendarioMes(id, mes, anio);
+    res.json(fechas);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+
+
+exports.guardarDiasCalendarioMesActual = async (req, res) => {
+  const { id } = req.params;
+  const { laborados, vacaciones, id_ciclo } = req.body;
+
+  try {
+    await Empleado.eliminarDiasCalendarioMesActual(id);
+
+    for (const fecha of laborados) {
+      await Empleado.insertarDiaCalendario(id, fecha, 'Laborado', null);
+    }
+
+    for (const fecha of vacaciones) {
+      await Empleado.insertarDiaCalendario(id, fecha, 'Vacación', id_ciclo);
+    }
+
+    res.json({ msg: '✅ Calendario actualizado correctamente.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.obtenerCicloVacaciones = async (req, res) => {
+  try {
+    const data = await Empleado.obtenerCicloVacaciones(req.params.id);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+

@@ -1,0 +1,41 @@
+.contenedor-reportes {
+  padding: 20px;
+  color: white;
+  background-color: #121212;
+  min-height: 100vh;
+}
+
+.filtros {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.filtros label {
+  font-weight: bold;
+}
+
+.graficas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 30px;
+  justify-content: center;
+}
+
+.grafica {
+  width: 450px;
+  padding: 20px;
+  background-color: #222;
+  border-radius: 10px;
+}
+
+.btn-generar {
+  padding: 12px 30px;
+  font-size: 16px;
+  border: none;
+  border-radius: 8px;
+  background-color: #007bff;
+  color: white;
+  cursor: pointer;
+}

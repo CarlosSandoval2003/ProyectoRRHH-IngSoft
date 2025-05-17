@@ -16,6 +16,14 @@ function Nomina() {
   const mostrarColumnaDepartamento = departamentoSeleccionado === 'all';
   const [fechaNomina, setFechaNomina] = useState('');
   const navigate = useNavigate();
+  const [mostrarFormularioIndividual, setMostrarFormularioIndividual] = useState(false);
+const [empleadoSeleccionado, setEmpleadoSeleccionado] = useState(null);
+const [fechaNominaIndividual, setFechaNominaIndividual] = useState('');
+const [tipoNominaIndividual, setTipoNominaIndividual] = useState('');
+const verNominasEmpleado = (id_empleado) => {
+  navigate(`/nominas-empleado/${id_empleado}`);
+};
+
 
   useEffect(() => {
     obtenerDepartamentos();
@@ -31,6 +39,42 @@ function Nomina() {
       console.error('Error al obtener departamentos:', error);
     }
   };
+
+  const abrirFormularioIndividual = (empleado) => {
+  setEmpleadoSeleccionado(empleado);
+  setFechaNominaIndividual('');
+  setTipoNominaIndividual('');
+  setMostrarFormularioIndividual(true);
+};
+
+const generarNominaEmpleado = async () => {
+  try {
+    const fecha = new Date(fechaNominaIndividual);
+    const [anio, mes] = fechaNominaIndividual.split('-').map(Number);
+
+
+    const payload = {
+  id_empleado: empleadoSeleccionado.id_empleado,
+  fecha_nomina: fechaNominaIndividual,
+  id_tipo_nomina: tipoNominaIndividual,
+  id_estado: 1,
+  mes: mes,
+  anio: anio,
+  id_departamento: empleadoSeleccionado.id_departamento // <-- ¡ESTO ES LO NUEVO!
+};
+
+
+    await axios.post('http://localhost:3001/api/nomina/generar-empleado', payload);
+    alert('✅ Nómina generada para el empleado.');
+    setMostrarFormularioIndividual(false);
+    setEmpleadoSeleccionado(null);
+    obtenerEmpleados();
+  } catch (error) {
+    console.error('❌ Error al generar nómina individual:', error.response?.data?.message || error.message);
+    alert('❌ Ocurrió un error al generar la nómina.');
+  }
+};
+
 
   const obtenerTiposNomina = async () => {
     try {
@@ -95,51 +139,40 @@ function Nomina() {
   };
 
   const generarNominaMasiva = async () => {
-    try {
-      const fechaInicio = new Date(fechaNomina);
-      let fechaFin = new Date(fechaNomina);
-  
-      if (tipoNominaSeleccionado === '1') {
-        // Mensual
-        fechaInicio.setDate(1);
-        fechaFin = new Date(fechaInicio.getFullYear(), fechaInicio.getMonth() + 1, 0); // último día del mes
-      } else if (tipoNominaSeleccionado === '2') {
-        // Quincenal
-        fechaFin.setDate(fechaInicio.getDate() + 14);
-      } else if (tipoNominaSeleccionado === '3') {
-        // Semanal
-        fechaFin.setDate(fechaInicio.getDate() + 6);
-      }
-  
-      const payload = {
-        fecha_nomina: fechaNomina,
-        fecha_inicio: fechaInicio.toISOString().slice(0, 10),
-        fecha_fin: fechaFin.toISOString().slice(0, 10),
-        id_tipo_nomina: tipoNominaSeleccionado,
-        id_estado: 1, // Asumimos que es "Generada"
-        id_departamento: depMasivo
-      };
-  
-      if (depMasivo === 'all') {
-        await axios.post('http://localhost:3001/api/nomina/generar-masivo', payload);
-        alert('Nómina masiva para todos los empleados generada exitosamente.');
-      } else {
-        await axios.post('http://localhost:3001/api/nomina/generar-departamento', payload);
-        alert('Nómina masiva por departamento generada exitosamente.');
-      }
-  
-      // Limpieza
-      setMostrarFormularioMasivo(false);
-      setDepMasivo('');
-      setTipoNominaSeleccionado('');
-      setFechaNomina('');
-      obtenerEmpleados();
-  
-    } catch (error) {
-      console.error('Error al generar nómina:', error.response?.data?.message || error.message);
-      alert('Ocurrió un error al generar la nómina.');
+  try {
+    const fecha = new Date(fechaNomina);
+    const [anio, mes] = fechaNomina.split('-').map(Number);
+
+
+    const payload = {
+      fecha_nomina: fechaNomina,
+      id_tipo_nomina: tipoNominaSeleccionado,
+      id_estado: 1,
+      mes: mes,
+      anio: anio,
+      id_departamento: depMasivo === 'all' ? null : depMasivo
+    };
+
+    if (depMasivo === 'all') {
+      await axios.post('http://localhost:3001/api/nomina/generar-masivo', payload);
+      alert('✅ Nómina generada para todos los empleados.');
+    } else {
+      await axios.post('http://localhost:3001/api/nomina/generar-departamento', payload);
+      alert('✅ Nómina generada para el departamento.');
     }
-  };
+
+    setMostrarFormularioMasivo(false);
+    setDepMasivo('');
+    setTipoNominaSeleccionado('');
+    setFechaNomina('');
+    obtenerEmpleados();
+
+  } catch (error) {
+    console.error('❌ Error al generar nómina:', error.response?.data?.message || error.message);
+    alert('❌ Ocurrió un error al generar la nómina.');
+  }
+};
+
   
 
   return (
@@ -252,11 +285,13 @@ function Nomina() {
 <div style={{ marginBottom: '15px' }}>
   <label>Fecha de la Nómina:</label>
   <input
-    type="date"
-    value={fechaNomina}
-    onChange={(e) => setFechaNomina(e.target.value)}
-    style={{ marginLeft: '10px', padding: '5px' }}
-  />
+  type="month"
+  value={fechaNomina}
+  onChange={(e) => setFechaNomina(e.target.value)}
+  style={{ marginLeft: '10px', padding: '5px' }}
+/>
+
+
 </div>
 
 
@@ -315,15 +350,98 @@ function Nomina() {
                       borderRadius: '5px',
                       cursor: 'pointer'
                     }}
+                    onClick={() => verNominasEmpleado(empleado.id_empleado)}
                   >
                     Ver Nómina
                   </button>
+                  <button
+    style={{
+      backgroundColor: '#ffc107',
+      color: 'black',
+      padding: '6px 14px',
+      border: 'none',
+      borderRadius: '5px',
+      cursor: 'pointer'
+    }}
+    onClick={() => abrirFormularioIndividual(empleado)}
+  >
+    Crear Nómina
+  </button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {mostrarFormularioIndividual && (
+  <div style={{ background: '#333', padding: '20px', borderRadius: '10px', marginTop: '20px' }}>
+    <h4>Generar Nómina para {empleadoSeleccionado.nombre_completo}</h4>
+
+    <div style={{ marginBottom: '15px' }}>
+      <label>Tipo de Nómina:</label>
+      <select
+        value={tipoNominaIndividual}
+        onChange={(e) => setTipoNominaIndividual(e.target.value)}
+        style={{ marginLeft: '10px' }}
+      >
+        <option value="">-- Selecciona --</option>
+        {tiposNomina.map((tipo) => (
+          <option key={tipo.id_tipo_nomina} value={tipo.id_tipo_nomina}>
+            {tipo.tipo}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    <div style={{ marginBottom: '15px' }}>
+      <label>Fecha de Nómina:</label>
+      <input
+  type="month"
+  value={fechaNominaIndividual}
+  onChange={(e) => setFechaNominaIndividual(e.target.value)}
+  style={{ marginLeft: '10px', padding: '5px' }}
+/>
+
+    </div>
+
+    <button
+      disabled={tipoNominaIndividual === '' || fechaNominaIndividual === ''}
+      onClick={generarNominaEmpleado}
+      style={{
+        backgroundColor:
+          tipoNominaIndividual === '' || fechaNominaIndividual === ''
+            ? '#888'
+            : '#28a745',
+        color: 'white',
+        padding: '8px 20px',
+        border: 'none',
+        borderRadius: '5px',
+        cursor:
+          tipoNominaIndividual === '' || fechaNominaIndividual === ''
+            ? 'not-allowed'
+            : 'pointer'
+      }}
+    >
+      Generar Nómina
+    </button>
+
+    <button
+      onClick={() => setMostrarFormularioIndividual(false)}
+      style={{
+        marginLeft: '10px',
+        backgroundColor: '#dc3545',
+        color: 'white',
+        padding: '8px 20px',
+        border: 'none',
+        borderRadius: '5px',
+        cursor: 'pointer'
+      }}
+    >
+      Cancelar
+    </button>
+  </div>
+)}
+
     </div>
   );
 }

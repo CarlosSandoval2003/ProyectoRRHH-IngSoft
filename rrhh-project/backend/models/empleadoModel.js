@@ -47,29 +47,34 @@ module.exports = {
     });
   }),
 
-  listarDiasTrabajadosMesActual: (id_empleado) => new Promise((resolve, reject) => {
-    db.query('CALL sp_listar_dias_trabajados_mes_actual(?)', [id_empleado], (err, results) => {
-      if (err) return reject(err);
-      const fechas = results[0].map(row => row.fecha.toISOString().split('T')[0]);
-      resolve(fechas);
-    });
-  }),
-  
-  eliminarDiasTrabajadosMesActual: (id_empleado) => new Promise((resolve, reject) => {
-    db.query('CALL sp_eliminar_dias_mes_actual(?)', [id_empleado], (err) => {
+listarDiasCalendarioMes: (id_empleado, mes, anio) => new Promise((resolve, reject) => {
+  db.query('CALL sp_listar_dias_mes(?, ?, ?)', [id_empleado, mes, anio], (err, results) => {
+    if (err) return reject(err);
+    const fechas = results[0].map(row => ({
+      fecha: row.fecha.toISOString().split('T')[0],
+      tipo: row.tipo
+    }));
+    resolve(fechas);
+  });
+}),
+
+
+eliminarDiasCalendarioMesActual: (id_empleado) => new Promise((resolve, reject) => {
+  db.query('CALL sp_eliminar_dias_mes_actual(?)', [id_empleado], (err) => {
+    if (err) return reject(err);
+    resolve();
+  });
+}),
+
+insertarDiaCalendario: (id_empleado, fecha, tipo, id_ciclo) => new Promise((resolve, reject) => {
+  db.query('CALL sp_insertar_dia_calendario(?, ?, ?, ?, ?)', 
+    [id_empleado, fecha, tipo, id_ciclo || null, `Ingreso manual como ${tipo}`],
+    (err) => {
       if (err) return reject(err);
       resolve();
-    });
-  }),
-  
-  insertarDiaTrabajado: (id_empleado, fecha) => new Promise((resolve, reject) => {
-    db.query('CALL sp_insertar_dia_trabajado(?, ?, ?, ?)', 
-      [id_empleado, fecha, 'Laborado', 'Ingreso manual desde checklist'], 
-      (err) => {
-        if (err) return reject(err);
-        resolve();
-    });
-  }),
+  });
+}),
+
 
   listarPuestosPorDepartamento: (id_departamento) => new Promise((resolve, reject) => {
     db.query('CALL sp_listar_puestos_por_departamento(?)', [id_departamento], (err, results) => {
@@ -92,6 +97,17 @@ module.exports = {
       resolve({ msg: 'Hora extra insertada correctamente' });
     });
   }),
+
+obtenerCicloVacaciones: (id_empleado) => new Promise((resolve, reject) => {
+  db.query('CALL sp_obtener_ciclo_vacaciones(?)', [id_empleado], (err, results) => {
+    if (err) return reject(err);
+    resolve(results[0][0]); // devuelve un solo ciclo activo
+  });
+}),
+
+
+
+  
   
 };
 

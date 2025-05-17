@@ -15,6 +15,13 @@ const [totalHoras, setTotalHoras] = useState(0);
 const [mostrarDias, setMostrarDias] = useState(false);
 const [diasSeleccionados, setDiasSeleccionados] = useState([]);
 const [todosLosDias, setTodosLosDias] = useState([]);
+const [laborados, setLaborados] = useState([]);
+const [vacaciones, setVacaciones] = useState([]);
+const [idCicloVacaciones, setIdCicloVacaciones] = useState(null);
+const [mesSeleccionado, setMesSeleccionado] = useState(new Date().getMonth() + 1); // 1 a 12
+const [anioSeleccionado, setAnioSeleccionado] = useState(new Date().getFullYear());
+
+
 
 
 const obtenerHistorialHoras = async () => {
@@ -28,26 +35,44 @@ const obtenerHistorialHoras = async () => {
   }
 };
 
-const toggleDia = (fecha) => {
-  if (diasSeleccionados.includes(fecha)) {
-    setDiasSeleccionados(diasSeleccionados.filter(f => f !== fecha));
-  } else {
-    setDiasSeleccionados([...diasSeleccionados, fecha]);
+const toggleDia = (fecha, tipo) => {
+  if (tipo === 'Laborado') {
+    if (vacaciones.includes(fecha)) return; // si está como vacación no puede ser trabajado
+
+    setLaborados(prev =>
+      prev.includes(fecha) ? prev.filter(f => f !== fecha) : [...prev, fecha]
+    );
+  } else if (tipo === 'Vacación') {
+    if (laborados.includes(fecha)) return; // si está como trabajado no puede ser vacación
+
+    setVacaciones(prev =>
+      prev.includes(fecha) ? prev.filter(f => f !== fecha) : [...prev, fecha]
+    );
   }
 };
 
-const guardarDiasTrabajados = async () => {
+const guardarCalendario = async () => {
   try {
-    await axios.post(`http://localhost:3001/api/empleados/diastrabajados/${id}`, {
-      fechas: diasSeleccionados
+    // 1. Obtener el ciclo activo desde el backend
+    const cicloRes = await axios.get(`http://localhost:3001/api/empleados/ciclo-vacaciones/${id}`);
+    const id_ciclo = cicloRes.data.id_ciclo;
+
+    // 2. Enviar los datos al backend
+    await axios.post(`http://localhost:3001/api/empleados/calendario/${id}`, {
+      laborados,
+      vacaciones,
+      id_ciclo
     });
-    alert("✅ Días trabajados guardados correctamente.");
+
+    alert("✅ Calendario actualizado correctamente.");
     setMostrarDias(false);
   } catch (err) {
-    console.error("❌ Error al guardar días trabajados:", err);
-    alert("❌ Ocurrió un error al guardar.");
+    console.error("❌ Error al guardar calendario:", err);
+    alert("❌ Error al guardar días.");
   }
 };
+
+
 
 
 const agregarHoraExtra = async () => {
@@ -75,35 +100,40 @@ const agregarHoraExtra = async () => {
         .catch(err => console.error("❌ Error al obtener horas extras:", err));
     }, [id]);
 
-    useEffect(() => {
-      if (mostrarDias) {
-        const cargarDias = async () => {
-          try {
-            // 1. Días ya registrados
-            const res = await axios.get(`http://localhost:3001/api/empleados/diastrabajados/${id}`);
-            setDiasSeleccionados(res.data);
-    
-            // 2. Generar todos los días del mes actual
-            const hoy = new Date();
-            const year = hoy.getFullYear();
-            const month = hoy.getMonth();
-            const diasMes = new Date(year, month + 1, 0).getDate();
-            const fechas = [];
-    
-            for (let dia = 1; dia <= diasMes; dia++) {
-              const fecha = new Date(year, month, dia).toISOString().split('T')[0];
-              fechas.push(fecha);
-            }
-    
-            setTodosLosDias(fechas);
-          } catch (err) {
-            console.error("❌ Error al cargar días trabajados:", err);
-          }
-        };
-    
-        cargarDias();
+   useEffect(() => {
+  if (!mostrarDias) return;
+
+  const cargarDias = async () => {
+    try {
+      const [diasRes, cicloRes] = await Promise.all([
+        axios.get(`http://localhost:3001/api/empleados/calendario/${id}?mes=${mesSeleccionado}&anio=${anioSeleccionado}`),
+        axios.get(`http://localhost:3001/api/empleados/ciclo-vacaciones/${id}`)
+      ]);
+
+      const laborados = diasRes.data.filter(d => d.tipo === 'Laborado').map(d => d.fecha);
+      const vacaciones = diasRes.data.filter(d => d.tipo === 'Vacación').map(d => d.fecha);
+      setLaborados(laborados);
+      setVacaciones(vacaciones);
+      setIdCicloVacaciones(cicloRes.data.id_ciclo || null);
+
+      const diasMes = new Date(anioSeleccionado, mesSeleccionado, 0).getDate();
+      const fechas = [];
+      for (let dia = 1; dia <= diasMes; dia++) {
+        const fecha = new Date(anioSeleccionado, mesSeleccionado - 1, dia).toISOString().split('T')[0];
+        fechas.push(fecha);
       }
-    }, [mostrarDias, id]);
+
+      setTodosLosDias(fechas);
+    } catch (err) {
+      console.error("❌ Error al cargar días o ciclo:", err);
+    }
+  };
+
+  cargarDias();
+}, [mesSeleccionado, anioSeleccionado, mostrarDias]);
+
+
+
     
     
   
@@ -200,24 +230,67 @@ const agregarHoraExtra = async () => {
 
 {mostrarDias && (
   <div className="panel-horas-extra">
-    <h3>Días Trabajados del Empleado</h3>
-    <p><strong>Mes:</strong> {new Date().toLocaleString('default', { month: 'long' }).toUpperCase()}</p>
+    <h3>Calendario del Empleado</h3>
+    <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', alignItems: 'center' }}>
+  <label>
+    Mes:&nbsp;
+    <select value={mesSeleccionado} onChange={e => setMesSeleccionado(parseInt(e.target.value))}>
+      {[
+        [1, 'Enero'], [2, 'Febrero'], [3, 'Marzo'], [4, 'Abril'],
+        [5, 'Mayo'], [6, 'Junio'], [7, 'Julio'], [8, 'Agosto'],
+        [9, 'Septiembre'], [10, 'Octubre'], [11, 'Noviembre'], [12, 'Diciembre']
+      ].map(([val, name]) => (
+        <option key={val} value={val}>{name}</option>
+      ))}
+    </select>
+  </label>
 
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+  <label>
+    Año:&nbsp;
+    <input
+      type="number"
+      value={anioSeleccionado}
+      onChange={e => setAnioSeleccionado(parseInt(e.target.value))}
+      style={{ width: '80px' }}
+    />
+  </label>
+</div>
+
+      <div style={{ textAlign: 'center', margin: '10px' }}>
+  <button onClick={() => {
+    const nuevasLaborados = todosLosDias.filter(f => !vacaciones.includes(f));
+    setLaborados(nuevasLaborados);
+  }}>
+    ✅ Marcar Todo como Trabajado
+  </button>
+</div>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'center' }}>
       {todosLosDias.map(fecha => (
-        <label key={fecha} style={{ minWidth: '120px' }}>
-          <input
-            type="checkbox"
-            checked={diasSeleccionados.includes(fecha)}
-            onChange={() => toggleDia(fecha)}
-          />
-          {fecha}
-        </label>
+        <div key={fecha} style={{ minWidth: '120px', textAlign: 'center', background: '#222', padding: '5px', borderRadius: '6px' }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={laborados.includes(fecha)}
+              onChange={() => toggleDia(fecha, 'Laborado')}
+              disabled={vacaciones.includes(fecha)}
+            /> Trabajo
+          </label>
+          <br />
+          <label>
+            <input
+              type="checkbox"
+              checked={vacaciones.includes(fecha)}
+              onChange={() => toggleDia(fecha, 'Vacación')}
+              disabled={laborados.includes(fecha)}
+            /> Vacación
+          </label>
+          <div style={{ fontSize: '12px', color: '#bbb' }}>{fecha}</div>
+        </div>
       ))}
     </div>
 
     <div style={{ marginTop: '10px' }}>
-      <button onClick={guardarDiasTrabajados}>💾 Guardar Cambios</button>
+      <button onClick={guardarCalendario}>💾 Guardar Cambios</button>
       <button className="btn-volver" onClick={() => setMostrarDias(false)} style={{ marginLeft: '10px' }}>
         ❌ Cancelar
       </button>
@@ -246,6 +319,7 @@ export const EditarEmpleado = () => {
     const [error, setError] = useState('');
     const [departamentos, setDepartamentos] = useState([]);
     const [puestosFiltrados, setPuestosFiltrados] = useState([]);
+
     const [estados, setEstados] = useState([]);
 
   
@@ -445,7 +519,41 @@ export const EditarEmpleado = () => {
   
     const [mensaje, setMensaje] = useState('');
     const [error, setError] = useState('');
-  
+    const [departamentos, setDepartamentos] = useState([]);
+const [puestosFiltrados, setPuestosFiltrados] = useState([]);
+const [estados, setEstados] = useState([]);
+
+  useEffect(() => {
+  const cargarDatos = async () => {
+    try {
+      const resDeps = await axios.get('http://localhost:3001/api/empleados/departamentos');
+      const resEstados = await axios.get('http://localhost:3001/api/empleados/estados');
+      setDepartamentos(resDeps.data);
+      setEstados(resEstados.data);
+    } catch (err) {
+      console.error("❌ Error al cargar selects:", err);
+    }
+  };
+
+  cargarDatos();
+}, []);
+
+useEffect(() => {
+  if (!form.id_departamento) return;
+
+  const cargarPuestos = async () => {
+    try {
+      const res = await axios.get(`http://localhost:3001/api/empleados/puestos/${form.id_departamento}`);
+      setPuestosFiltrados(res.data);
+    } catch (err) {
+      console.error("❌ Error al cargar puestos:", err);
+    }
+  };
+
+  cargarPuestos();
+}, [form.id_departamento]);
+
+
     const [validaciones, setValidaciones] = useState({
       dpi: true,
       email: true,
@@ -531,41 +639,88 @@ export const EditarEmpleado = () => {
         {error && <p style={{ color: 'crimson' }}>{error}</p>}
   
         <form onSubmit={handleSubmit}>
-          {Object.entries(form).map(([key, val]) => (
-            <div key={key}>
-              <label>{key.replace(/_/g, ' ')}</label>
-              {key === 'fecha_contratacion' ? (
-                <input
-                  type="date"
-                  name={key}
-                  value={val}
-                  onChange={handleChange}
-                  required
-                />
-              ) : (
-                <input
-                  type="text"
-                  name={key}
-                  value={val}
-                  onChange={handleChange}
-                  required
-                />
-              )}
-  
-              {/* Validaciones visuales en tiempo real */}
-              {key === 'dpi' && !validaciones.dpi && <p className="error">❌ El DPI ya está registrado</p>}
-              {key === 'email' && !validaciones.email && <p className="error">❌ El email ya está registrado</p>}
-              {key === 'telefono' && !validaciones.telefono && <p className="error">❌ El teléfono ya está registrado</p>}
-            </div>
-          ))}
-  
-          <button
-            type="submit"
-            disabled={!validaciones.dpi || !validaciones.email || !validaciones.telefono}
-          >
-            Guardar
-          </button>
-        </form>
+  <div>
+    <label>Nombres</label>
+    <input name="nombres" value={form.nombres} onChange={handleChange} required />
+  </div>
+
+  <div>
+    <label>Apellidos</label>
+    <input name="apellidos" value={form.apellidos} onChange={handleChange} required />
+  </div>
+
+  <div>
+    <label>DPI</label>
+    <input name="dpi" value={form.dpi} onChange={handleChange} required />
+    {!validaciones.dpi && <p className="error">❌ El DPI ya está registrado</p>}
+  </div>
+
+  <div>
+    <label>Email</label>
+    <input name="email" value={form.email} onChange={handleChange} required />
+    {!validaciones.email && <p className="error">❌ El email ya está registrado</p>}
+  </div>
+
+  <div>
+    <label>Teléfono</label>
+    <input name="telefono" value={form.telefono} onChange={handleChange} required />
+    {!validaciones.telefono && <p className="error">❌ El teléfono ya está registrado</p>}
+  </div>
+
+  <div>
+    <label>Fecha de Contratación</label>
+    <input type="date" name="fecha_contratacion" value={form.fecha_contratacion} onChange={handleChange} required />
+  </div>
+
+  <div>
+    <label>Salario Base</label>
+    <input type="number" name="salario_base" value={form.salario_base} onChange={handleChange} required />
+  </div>
+
+  <div>
+    <label>Departamento</label>
+    <select name="id_departamento" value={form.id_departamento} onChange={handleChange} required>
+      <option value="">Seleccione un departamento</option>
+      {departamentos.map(dep => (
+        <option key={dep.id_departamento} value={dep.id_departamento}>
+          {dep.nombre_departamento}
+        </option>
+      ))}
+    </select>
+  </div>
+
+  <div>
+    <label>Puesto</label>
+    <select name="id_puesto" value={form.id_puesto} onChange={handleChange} required>
+      <option value="">Seleccione un puesto</option>
+      {puestosFiltrados.map(p => (
+        <option key={p.id_puesto} value={p.id_puesto}>
+          {p.nombre_puesto}
+        </option>
+      ))}
+    </select>
+  </div>
+
+  <div>
+    <label>Estado</label>
+    <select name="id_estado" value={form.id_estado} onChange={handleChange} required>
+      <option value="">Seleccione un estado</option>
+      {estados.map(est => (
+        <option key={est.id_estado} value={est.id_estado}>
+          {est.estado}
+        </option>
+      ))}
+    </select>
+  </div>
+
+  <button
+    type="submit"
+    disabled={!validaciones.dpi || !validaciones.email || !validaciones.telefono}
+  >
+    Guardar
+  </button>
+</form>
+
       </div>
     );
   };

@@ -15,8 +15,7 @@ router.get('/horasextras/:id', empCtrl.obtenerHorasExtrasMesActual);
 router.get('/horasextras/listar/:id', empCtrl.listarHorasExtraMesActual);
 router.post('/horasextras/insertar/:id', empCtrl.insertarHoraExtra);
 
-router.get('/diastrabajados/:id', empCtrl.listarDiasTrabajadosMesActual);
-router.post('/diastrabajados/:id', empCtrl.guardarDiasTrabajadosMesActual);
+
 
 
 // CRUD Empleados via sp_gestion_empleado
@@ -25,5 +24,12 @@ router.get('/:id',    empCtrl.obtenerEmpleado);
 router.post('/',      empCtrl.crearEmpleado);
 router.put('/:id',    empCtrl.actualizarEmpleado);
 router.delete('/:id', empCtrl.eliminarEmpleado);
+
+// Vacaciones
+router.get('/calendario/:id', empCtrl.listarDiasCalendarioMesActual);
+router.post('/calendario/:id', empCtrl.guardarDiasCalendarioMesActual);
+router.get('/ciclo-vacaciones/:id', empCtrl.obtenerCicloVacaciones);
+
+
 
 module.exports = router;

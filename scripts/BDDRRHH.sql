@@ -57,6 +57,24 @@ CREATE TABLE DiasTrabajados (
   FOREIGN KEY (id_empleado) REFERENCES Empleados(id_empleado)
 );
 
+CREATE TABLE VacacionesCiclo (
+  id_ciclo INT AUTO_INCREMENT PRIMARY KEY,
+  id_empleado INT NOT NULL,
+  anio INT NOT NULL,
+  dias_asignados INT NOT NULL,
+  dias_usados INT DEFAULT 0,
+  FOREIGN KEY (id_empleado) REFERENCES Empleados(id_empleado)
+);
+
+CREATE TABLE VacacionesDias (
+  id_vacacion INT AUTO_INCREMENT PRIMARY KEY,
+  id_ciclo INT NOT NULL,
+  fecha DATE NOT NULL,
+  FOREIGN KEY (id_ciclo) REFERENCES VacacionesCiclo(id_ciclo)
+);
+
+
+
 
 CREATE TABLE EstadoNomina (
     id_estado INT AUTO_INCREMENT PRIMARY KEY,
@@ -157,6 +175,26 @@ CREATE TABLE Usuarios (
     id_rol INT NOT NULL,
     FOREIGN KEY (id_rol) REFERENCES Roles(id_rol)
 );
+
+
+CREATE TABLE Liquidaciones (
+  id_liquidacion INT AUTO_INCREMENT PRIMARY KEY,
+  id_empleado INT NOT NULL,
+  fecha_despido DATE NOT NULL,
+  salario_promedio DECIMAL(10,2),
+  anios_completos INT,
+  meses INT,
+  indemnizacion DECIMAL(10,2),
+  dias_no_gozados INT,
+  vacaciones_pendientes DECIMAL(10,2),
+  aguinaldo_proporcional DECIMAL(10,2),
+  bono14_proporcional DECIMAL(10,2),
+  horas_extra_mes DECIMAL(10,2),
+  total_liquidacion DECIMAL(10,2),
+  fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (id_empleado) REFERENCES Empleados(id_empleado)
+);
+
 
 -- Inserts iniciales
 
@@ -351,18 +389,19 @@ CREATE PROCEDURE sp_prestacion_aguinaldo (
 BEGIN
   DECLARE v_fecha_contratacion DATE;
   DECLARE v_salario_base DECIMAL(10,2);
-  DECLARE v_meses_trabajados INT;
+  DECLARE v_dias_trabajados INT;
   DECLARE v_monto DECIMAL(10,2);
   DECLARE v_estado INT;
   DECLARE v_existe INT;
+  DECLARE v_fecha_inicio_periodo DATE;
+  DECLARE v_fecha_fin_periodo DATE;
+  DECLARE v_dias_periodo INT;
 
-  -- Validar existencia del empleado
   SELECT COUNT(*) INTO v_existe FROM Empleados WHERE id_empleado = p_id_empleado;
   IF v_existe = 0 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'El empleado no existe.';
   END IF;
 
-  -- Verificar estado del empleado
   SELECT id_estado INTO v_estado FROM Empleados WHERE id_empleado = p_id_empleado;
   IF v_estado != 1 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'El empleado no está activo.';
@@ -371,19 +410,31 @@ BEGIN
   SELECT fecha_contratacion, salario_base INTO v_fecha_contratacion, v_salario_base
   FROM Empleados WHERE id_empleado = p_id_empleado;
 
-  SET v_meses_trabajados = PERIOD_DIFF(DATE_FORMAT(p_fecha_aplicacion, '%Y%m'), DATE_FORMAT(v_fecha_contratacion, '%Y%m'));
+  -- Determinar período legal de cálculo (aguinaldo: 15 dic año anterior a 14 dic actual)
+  SET v_fecha_inicio_periodo = DATE_SUB(DATE_FORMAT(p_fecha_aplicacion, '%Y-12-15'), INTERVAL 1 YEAR);
+  SET v_fecha_fin_periodo = DATE_SUB(DATE_FORMAT(p_fecha_aplicacion, '%Y-12-15'), INTERVAL 1 DAY);
+  SET v_dias_periodo = DATEDIFF(v_fecha_fin_periodo, v_fecha_inicio_periodo) + 1;
 
-  IF v_meses_trabajados >= 12 THEN
-    SET v_monto = v_salario_base;
+  -- Calcular días trabajados en el período
+  IF v_fecha_contratacion > v_fecha_inicio_periodo THEN
+    SET v_dias_trabajados = DATEDIFF(v_fecha_fin_periodo, v_fecha_contratacion) + 1;
   ELSE
-    SET v_monto = ROUND(v_salario_base * (v_meses_trabajados / 12), 2);
+    SET v_dias_trabajados = v_dias_periodo;
   END IF;
 
-  INSERT INTO PrestacionEmpleado (id_prestacion, id_empleado, fecha_aplicacion, monto)
-  VALUES (1, p_id_empleado, p_fecha_aplicacion, v_monto);
+  -- Calcular aguinaldo proporcional
+  SET v_monto = ROUND((v_salario_base * v_dias_trabajados) / v_dias_periodo, 2);
+
+  UPDATE PrestacionEmpleado
+  SET monto = v_monto
+  WHERE id_empleado = p_id_empleado
+    AND id_prestacion = 1
+    AND fecha_aplicacion = p_fecha_aplicacion;
 END $$
 
 DELIMITER ;
+
+
 
 DELIMITER $$
 
@@ -394,37 +445,57 @@ CREATE PROCEDURE sp_prestacion_bono14 (
 BEGIN
   DECLARE v_fecha_contratacion DATE;
   DECLARE v_salario_base DECIMAL(10,2);
-  DECLARE v_meses_trabajados INT;
+  DECLARE v_dias_trabajados INT;
+  DECLARE v_dias_periodo INT;
   DECLARE v_monto DECIMAL(10,2);
   DECLARE v_estado INT;
   DECLARE v_existe INT;
+  DECLARE v_fecha_inicio_periodo DATE;
+  DECLARE v_fecha_fin_periodo DATE;
 
+  -- Validar existencia
   SELECT COUNT(*) INTO v_existe FROM Empleados WHERE id_empleado = p_id_empleado;
   IF v_existe = 0 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'El empleado no existe.';
   END IF;
 
+  -- Validar estado
   SELECT id_estado INTO v_estado FROM Empleados WHERE id_empleado = p_id_empleado;
   IF v_estado != 1 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'El empleado no está activo.';
   END IF;
 
+  -- Obtener fecha de contratación y salario base
   SELECT fecha_contratacion, salario_base INTO v_fecha_contratacion, v_salario_base
   FROM Empleados WHERE id_empleado = p_id_empleado;
 
-  SET v_meses_trabajados = PERIOD_DIFF(DATE_FORMAT(p_fecha_aplicacion, '%Y%m'), DATE_FORMAT(v_fecha_contratacion, '%Y%m'));
+  -- Definir período legal del Bono 14: 15 de julio del año anterior al 14 de julio actual
+  SET v_fecha_inicio_periodo = DATE_SUB(DATE_FORMAT(p_fecha_aplicacion, '%Y-07-15'), INTERVAL 1 YEAR);
+  SET v_fecha_fin_periodo = DATE_SUB(DATE_FORMAT(p_fecha_aplicacion, '%Y-07-15'), INTERVAL 1 DAY);
+  SET v_dias_periodo = DATEDIFF(v_fecha_fin_periodo, v_fecha_inicio_periodo) + 1;
 
-  IF v_meses_trabajados >= 12 THEN
-    SET v_monto = v_salario_base;
+  -- Calcular días trabajados en ese período
+  IF v_fecha_contratacion > v_fecha_inicio_periodo THEN
+    SET v_dias_trabajados = DATEDIFF(LEAST(v_fecha_fin_periodo, CURDATE()), v_fecha_contratacion) + 1;
   ELSE
-    SET v_monto = ROUND(v_salario_base * (v_meses_trabajados / 12), 2);
+    SET v_dias_trabajados = v_dias_periodo;
   END IF;
 
-  INSERT INTO PrestacionEmpleado (id_prestacion, id_empleado, fecha_aplicacion, monto)
-  VALUES (2, p_id_empleado, p_fecha_aplicacion, v_monto);
+  -- Calcular Bono 14 proporcional
+  SET v_monto = ROUND((v_salario_base * v_dias_trabajados) / v_dias_periodo, 2);
+
+  -- Actualizar el monto en la tabla de prestaciones
+  UPDATE PrestacionEmpleado
+  SET monto = v_monto
+  WHERE id_empleado = p_id_empleado
+    AND id_prestacion = 2
+    AND fecha_aplicacion = p_fecha_aplicacion;
+
 END $$
 
 DELIMITER ;
+
+
 
 DELIMITER $$
 
@@ -577,6 +648,7 @@ DELIMITER ;
 
 -- PARA NOMINA DETALLE:
 
+
 DELIMITER $$
 
 CREATE PROCEDURE sp_insertar_ingresos_nomina (
@@ -586,23 +658,71 @@ CREATE PROCEDURE sp_insertar_ingresos_nomina (
   IN p_fecha_fin DATE
 )
 BEGIN
+  -- Variables
   DECLARE v_salario_base DECIMAL(10,2);
+  DECLARE v_tipo_nomina INT;
+  DECLARE v_dias_periodo INT;
+  DECLARE v_pago_sueldo DECIMAL(10,2);
+  DECLARE v_total_pagado_anteriormente DECIMAL(10,2);
+  DECLARE v_total_dias_mes INT;
+  DECLARE v_pago_diario DECIMAL(10,4);
   DECLARE v_total_horas_extra DECIMAL(10,2) DEFAULT 0.00;
-  DECLARE v_total_prestaciones DECIMAL(10,2) DEFAULT 0.00;
 
-  -- 1. Obtener salario base
-  SELECT salario_base INTO v_salario_base
-  FROM Empleados
-  WHERE id_empleado = p_id_empleado;
+  DECLARE cur_fecha DATE;
+  DECLARE cur_id_prestacion INT;
+  DECLARE p_nombre VARCHAR(25);
+  DECLARE p_monto DECIMAL(10,2);
+  DECLARE nueva_fecha DATE;
 
-  -- 2. Insertar sueldo base
+  DECLARE done INT DEFAULT 0;
+
+  -- Cursors
+  DECLARE cur CURSOR FOR
+    SELECT fecha_aplicacion, id_prestacion
+    FROM PrestacionEmpleado
+    WHERE id_empleado = p_id_empleado
+      AND fecha_aplicacion BETWEEN p_fecha_inicio AND p_fecha_fin;
+
+  DECLARE cur2 CURSOR FOR
+    SELECT pr.nombre_prestacion, pe.monto
+    FROM PrestacionEmpleado pe
+    JOIN Prestaciones pr ON pe.id_prestacion = pr.id_prestacion
+    WHERE pe.id_empleado = p_id_empleado
+      AND pe.fecha_aplicacion BETWEEN p_fecha_inicio AND p_fecha_fin;
+
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+
+  -- 1. Obtener salario y tipo de nómina
+  SELECT e.salario_base, n.id_tipo_nomina
+  INTO v_salario_base, v_tipo_nomina
+  FROM Nominas n
+  JOIN Empleados e ON n.id_empleado = e.id_empleado
+  WHERE n.id_nomina = p_id_nomina;
+
+  -- 2. Calcular días del período
+  SET v_dias_periodo = DATEDIFF(p_fecha_fin, p_fecha_inicio) + 1;
+  SET v_total_dias_mes = DAY(LAST_DAY(p_fecha_inicio));
+  SET v_pago_diario = v_salario_base / v_total_dias_mes;
+
+  SELECT IFNULL(SUM(nd.monto), 0) INTO v_total_pagado_anteriormente
+  FROM NominaDetalles nd
+  JOIN Nominas n ON nd.id_nomina = n.id_nomina
+  WHERE n.id_empleado = p_id_empleado
+    AND MONTH(n.fecha_inicio) = MONTH(p_fecha_inicio)
+    AND YEAR(n.fecha_inicio) = YEAR(p_fecha_inicio)
+    AND n.id_tipo_nomina = v_tipo_nomina
+    AND nd.concepto = 'Sueldo base'
+    AND n.fecha_inicio < p_fecha_inicio;
+
+  SET v_pago_sueldo = ROUND((v_pago_diario * v_dias_periodo), 2);
+
   INSERT INTO NominaDetalles (
     id_nomina, id_impuesto, concepto, monto, tipo
   ) VALUES (
-    p_id_nomina, NULL, 'Sueldo base', v_salario_base, 'Ingreso'
+    p_id_nomina, NULL, 'Sueldo base', v_pago_sueldo, 'Ingreso'
   );
 
-  -- 3. Calcular horas extra en el rango
+  -- 3. Horas extra
   SELECT IFNULL(SUM(horas * montoporhora), 0) INTO v_total_horas_extra
   FROM HorasExtras
   WHERE id_empleado = p_id_empleado
@@ -616,84 +736,62 @@ BEGIN
     );
   END IF;
 
-  -- 4. Calcular prestaciones aplicadas en el rango
-  SELECT IFNULL(SUM(monto), 0) INTO v_total_prestaciones
-  FROM PrestacionEmpleado
+-- 4. Calcular prestaciones y diferir actualización de fecha
+SET done = 0;
+OPEN cur;
+loop1: LOOP
+  FETCH cur INTO cur_fecha, cur_id_prestacion;
+  IF done THEN LEAVE loop1; END IF;
+
+  IF cur_id_prestacion = 1 THEN
+    CALL sp_prestacion_aguinaldo(p_id_empleado, cur_fecha);
+  ELSEIF cur_id_prestacion = 2 THEN
+    CALL sp_prestacion_bono14(p_id_empleado, cur_fecha);
+  END IF;
+END LOOP;
+CLOSE cur;
+
+-- 5. Insertar en Detalle los nombres + montos reales de prestaciones
+SET done = 0;
+OPEN cur2;
+loop2: LOOP
+  FETCH cur2 INTO p_nombre, p_monto;
+  IF done THEN LEAVE loop2; END IF;
+
+  INSERT INTO NominaDetalles (
+    id_nomina, id_impuesto, concepto, monto, tipo
+  ) VALUES (
+    p_id_nomina, NULL, p_nombre, p_monto, 'Ingreso'
+  );
+END LOOP;
+CLOSE cur2;
+
+-- 6. ACTUALIZAR FECHA hasta AHORA (después de haberla usado)
+SET done = 0;
+OPEN cur;
+loop3: LOOP
+  FETCH cur INTO cur_fecha, cur_id_prestacion;
+  IF done THEN LEAVE loop3; END IF;
+
+  IF cur_id_prestacion = 1 THEN
+    SET nueva_fecha = STR_TO_DATE(CONCAT(YEAR(cur_fecha) + 1, '-12-15'), '%Y-%m-%d');
+  ELSEIF cur_id_prestacion = 2 THEN
+    SET nueva_fecha = STR_TO_DATE(CONCAT(YEAR(cur_fecha) + 1, '-07-15'), '%Y-%m-%d');
+  END IF;
+
+  WHILE DAYOFWEEK(nueva_fecha) IN (1,7) DO
+    SET nueva_fecha = DATE_ADD(nueva_fecha, INTERVAL 1 DAY);
+  END WHILE;
+
+  UPDATE PrestacionEmpleado
+  SET fecha_aplicacion = nueva_fecha
   WHERE id_empleado = p_id_empleado
-    AND fecha_aplicacion BETWEEN p_fecha_inicio AND p_fecha_fin;
+    AND id_prestacion = cur_id_prestacion
+    AND fecha_aplicacion = cur_fecha;
+END LOOP;
+CLOSE cur;
 
-  IF v_total_prestaciones > 0 THEN
-    INSERT INTO NominaDetalles (
-      id_nomina, id_impuesto, concepto, monto, tipo
-    ) VALUES (
-      p_id_nomina, NULL, 'Prestaciones', v_total_prestaciones, 'Ingreso'
-    );
-  END IF;
 
-END $$
-
-DELIMITER ;
-
-DELIMITER $$
-
-CREATE PROCEDURE sp_sumar_ingresos_nomina (
-  IN p_id_nomina INT,
-  OUT p_total_ingresos DECIMAL(10,2)
-)
-BEGIN
-  SELECT IFNULL(SUM(monto), 0) INTO p_total_ingresos
-  FROM NominaDetalles
-  WHERE id_nomina = p_id_nomina
-    AND tipo = 'Ingreso';
-END $$
-
-DELIMITER ;
-
-DELIMITER $$
-
-CREATE PROCEDURE sp_sumar_deducciones_nomina (
-  IN p_id_nomina INT,
-  OUT p_total_deducciones DECIMAL(10,2)
-)
-BEGIN
-  SELECT IFNULL(SUM(monto), 0) INTO p_total_deducciones
-  FROM NominaDetalles
-  WHERE id_nomina = p_id_nomina
-    AND tipo = 'Deducción';
-END $$
-
-DELIMITER ;
-
-DELIMITER $$
-
-CREATE PROCEDURE sp_actualizar_totales_nomina (
-  IN p_id_nomina INT
-)
-BEGIN
-  DECLARE v_total_ingresos DECIMAL(10,2);
-  DECLARE v_total_deducciones DECIMAL(10,2);
-  DECLARE v_salario_neto DECIMAL(10,2);
-
-  -- 1. Obtener total de ingresos
-  CALL sp_sumar_ingresos_nomina(p_id_nomina, v_total_ingresos);
-
-  -- 2. Obtener total de deducciones
-  CALL sp_sumar_deducciones_nomina(p_id_nomina, v_total_deducciones);
-
-  -- 3. Calcular salario neto
-  SET v_salario_neto = v_total_ingresos - v_total_deducciones;
-
-  -- ❌ Validar que el salario neto no sea negativo
-  IF v_salario_neto < 0 THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Error: El salario neto no puede ser negativo. Revisa las deducciones aplicadas.';
-  END IF;
-
-  -- 4. Actualizar tabla Nominas
-  UPDATE Nominas
-  SET salario_bruto = v_total_ingresos,
-      deducciones = v_total_deducciones,
-      salario_neto = v_salario_neto
-  WHERE id_nomina = p_id_nomina;
 END $$
 
 DELIMITER ;
@@ -768,15 +866,19 @@ CREATE PROCEDURE sp_generar_nomina_empleado (
   IN p_fecha_nomina DATE,
   IN p_id_tipo_nomina INT,
   IN p_id_estado INT,
-  IN p_fecha_inicio DATE,
-  IN p_fecha_fin DATE,
-  IN p_id_departamento INT -- nuevo parámetro
+  IN p_mes INT,
+  IN p_anio INT,
+  IN p_id_departamento INT
 )
 BEGIN
   DECLARE v_id_nomina INT;
   DECLARE v_existe INT;
   DECLARE v_estado INT;
+  DECLARE v_fecha_inicio DATE;
+  DECLARE v_fecha_fin DATE;
+  DECLARE v_es_ultima_parte TINYINT;
 
+  -- Validar existencia del empleado
   SELECT COUNT(*) INTO v_existe
   FROM Empleados
   WHERE id_empleado = p_id_empleado;
@@ -785,6 +887,7 @@ BEGIN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'El empleado no existe.';
   END IF;
 
+  -- Validar estado activo
   SELECT id_estado INTO v_estado
   FROM Empleados
   WHERE id_empleado = p_id_empleado;
@@ -793,37 +896,46 @@ BEGIN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'El empleado no está activo.';
   END IF;
 
-  IF p_fecha_inicio IS NULL OR p_fecha_fin IS NULL THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Fechas inválidas: no pueden estar vacías.';
-  END IF;
+  -- Obtener rango de fechas según tipo y mes
+  CALL sp_calcular_rango_nomina(
+    p_id_empleado,
+    p_id_tipo_nomina,
+    p_mes,
+    p_anio,
+    v_fecha_inicio,
+    v_fecha_fin,
+    v_es_ultima_parte
+  );
 
-  IF p_fecha_fin < p_fecha_inicio THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Fechas inválidas: la fecha final es anterior a la inicial.';
-  END IF;
-
+  -- Insertar encabezado de nómina (ya no se pasa el departamento)
   CALL sp_insertar_nomina(
     p_id_empleado,
-    p_fecha_nomina,
-    p_fecha_inicio,
-    p_fecha_fin,
+    CURRENT_DATE(),
+    v_fecha_inicio,
+    v_fecha_fin,
     p_id_tipo_nomina,
     p_id_estado,
-    p_id_departamento,
+    p_id_departamento,  
     v_id_nomina
   );
 
+  -- Insertar ingresos (sueldo, horas extra y prestaciones)
   CALL sp_insertar_ingresos_nomina(
     v_id_nomina,
     p_id_empleado,
-    p_fecha_inicio,
-    p_fecha_fin
+    v_fecha_inicio,
+    v_fecha_fin
   );
 
-  CALL sp_aplicar_impuestos_nomina(
-    v_id_nomina,
-    p_id_empleado
-  );
+  -- Aplicar impuestos solo si es la última parte (quincena 2 o semana 4)
+  IF v_es_ultima_parte = 1 THEN
+    CALL sp_aplicar_impuestos_nomina(
+      v_id_nomina,
+      p_id_empleado
+    );
+  END IF;
 
+  -- Actualizar totales
   CALL sp_actualizar_totales_nomina(
     v_id_nomina
   );
@@ -832,6 +944,70 @@ END $$
 DELIMITER ;
 
 
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_sumar_ingresos_nomina (
+  IN p_id_nomina INT,
+  OUT p_total_ingresos DECIMAL(10,2)
+)
+BEGIN
+  SELECT IFNULL(SUM(monto), 0) INTO p_total_ingresos
+  FROM NominaDetalles
+  WHERE id_nomina = p_id_nomina
+    AND tipo = 'Ingreso';
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_sumar_deducciones_nomina (
+  IN p_id_nomina INT,
+  OUT p_total_deducciones DECIMAL(10,2)
+)
+BEGIN
+  SELECT IFNULL(SUM(monto), 0) INTO p_total_deducciones
+  FROM NominaDetalles
+  WHERE id_nomina = p_id_nomina
+    AND tipo = 'Deducción';
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_actualizar_totales_nomina (
+  IN p_id_nomina INT
+)
+BEGIN
+  DECLARE v_total_ingresos DECIMAL(10,2);
+  DECLARE v_total_deducciones DECIMAL(10,2);
+  DECLARE v_salario_neto DECIMAL(10,2);
+
+  -- 1. Obtener total de ingresos
+  CALL sp_sumar_ingresos_nomina(p_id_nomina, v_total_ingresos);
+
+  -- 2. Obtener total de deducciones
+  CALL sp_sumar_deducciones_nomina(p_id_nomina, v_total_deducciones);
+
+  -- 3. Calcular salario neto
+  SET v_salario_neto = v_total_ingresos - v_total_deducciones;
+
+  -- ❌ Validar que el salario neto no sea negativo
+  IF v_salario_neto < 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Error: El salario neto no puede ser negativo. Revisa las deducciones aplicadas.';
+  END IF;
+
+  -- 4. Actualizar tabla Nominas
+  UPDATE Nominas
+  SET salario_bruto = v_total_ingresos,
+      deducciones = v_total_deducciones,
+      salario_neto = v_salario_neto
+  WHERE id_nomina = p_id_nomina;
+END $$
+
+DELIMITER ;
 
 
 DELIMITER $$
@@ -921,8 +1097,8 @@ CREATE PROCEDURE sp_generar_nomina_por_departamento (
   IN p_fecha_nomina DATE,
   IN p_id_tipo_nomina INT,
   IN p_id_estado INT,
-  IN p_fecha_inicio DATE,
-  IN p_fecha_fin DATE
+  IN p_mes INT,
+  IN p_anio INT
 )
 BEGIN
   DECLARE done INT DEFAULT 0;
@@ -944,28 +1120,19 @@ BEGIN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'No hay empleados activos en este departamento.';
   END IF;
 
-  IF p_fecha_inicio IS NULL OR p_fecha_fin IS NULL THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Fechas inválidas: no pueden estar vacías.';
-  END IF;
-
-  IF p_fecha_fin < p_fecha_inicio THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Fechas inválidas: la fecha final es anterior a la inicial.';
-  END IF;
-
   OPEN empleados_cursor;
 
   leer_empleado: LOOP
     FETCH empleados_cursor INTO v_id_empleado;
     IF done THEN LEAVE leer_empleado; END IF;
 
-    -- ✅ Aquí está la corrección: ahora sí se manda el ID del departamento
     CALL sp_generar_nomina_empleado(
       v_id_empleado,
       p_fecha_nomina,
       p_id_tipo_nomina,
       p_id_estado,
-      p_fecha_inicio,
-      p_fecha_fin,
+      p_mes,
+      p_anio,
       p_id_departamento
     );
   END LOOP;
@@ -978,14 +1145,15 @@ DELIMITER ;
 
 
 
+
 DELIMITER $$
 
 CREATE PROCEDURE sp_generar_nomina_todos (
   IN p_fecha_nomina DATE,
   IN p_id_tipo_nomina INT,
   IN p_id_estado INT,
-  IN p_fecha_inicio DATE,
-  IN p_fecha_fin DATE
+  IN p_mes INT,
+  IN p_anio INT
 )
 BEGIN
   DECLARE done INT DEFAULT 0;
@@ -999,7 +1167,6 @@ BEGIN
 
   DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
 
-  -- Validaciones
   SELECT COUNT(*) INTO v_total
   FROM Empleados
   WHERE id_estado = 1;
@@ -1008,28 +1175,19 @@ BEGIN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'No hay empleados activos en la empresa.';
   END IF;
 
-  IF p_fecha_inicio IS NULL OR p_fecha_fin IS NULL THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Fechas inválidas: no pueden estar vacías.';
-  END IF;
-
-  IF p_fecha_fin < p_fecha_inicio THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Fechas inválidas: la fecha final es anterior a la inicial.';
-  END IF;
-
   OPEN empleados_cursor;
 
   leer_empleado: LOOP
     FETCH empleados_cursor INTO v_id_empleado;
     IF done THEN LEAVE leer_empleado; END IF;
 
-    -- ✅ Corrección aquí: agregamos el parámetro de departamento (usa 0 para "Todos")
     CALL sp_generar_nomina_empleado(
       v_id_empleado,
       p_fecha_nomina,
       p_id_tipo_nomina,
       p_id_estado,
-      p_fecha_inicio,
-      p_fecha_fin,
+      p_mes,
+      p_anio,
       NULL
     );
   END LOOP;
@@ -1038,6 +1196,7 @@ BEGIN
 END $$
 
 DELIMITER ;
+
 
 
 
@@ -1168,6 +1327,39 @@ BEGIN
       p_nombres, p_apellidos, p_dpi, p_email, p_telefono, p_fecha_contratacion,
       p_salario_base, p_id_puesto, p_id_departamento, p_id_estado
     );
+    
+    -- Obtener el ID del nuevo empleado
+SET @nuevo_id := LAST_INSERT_ID();
+SET @anio_actual := YEAR(CURDATE());
+
+-- AGUINALDO
+SET @fecha_aguinaldo := STR_TO_DATE(CONCAT(@anio_actual, '-12-15'), '%Y-%m-%d');
+WHILE DAYOFWEEK(@fecha_aguinaldo) IN (1,7) DO
+  SET @fecha_aguinaldo := DATE_ADD(@fecha_aguinaldo, INTERVAL 1 DAY);
+END WHILE;
+IF CURDATE() > @fecha_aguinaldo THEN
+  SET @fecha_aguinaldo := STR_TO_DATE(CONCAT(@anio_actual + 1, '-12-15'), '%Y-%m-%d');
+  WHILE DAYOFWEEK(@fecha_aguinaldo) IN (1,7) DO
+    SET @fecha_aguinaldo := DATE_ADD(@fecha_aguinaldo, INTERVAL 1 DAY);
+  END WHILE;
+END IF;
+
+-- BONO 14
+SET @fecha_bono14 := STR_TO_DATE(CONCAT(@anio_actual, '-07-15'), '%Y-%m-%d');
+WHILE DAYOFWEEK(@fecha_bono14) IN (1,7) DO
+  SET @fecha_bono14 := DATE_ADD(@fecha_bono14, INTERVAL 1 DAY);
+END WHILE;
+IF CURDATE() > @fecha_bono14 THEN
+  SET @fecha_bono14 := STR_TO_DATE(CONCAT(@anio_actual + 1, '-07-15'), '%Y-%m-%d');
+  WHILE DAYOFWEEK(@fecha_bono14) IN (1,7) DO
+    SET @fecha_bono14 := DATE_ADD(@fecha_bono14, INTERVAL 1 DAY);
+  END WHILE;
+END IF;
+
+-- Registrar sin monto
+CALL sp_registrar_prestacion_empleado(@nuevo_id, 1, @fecha_aguinaldo); -- Aguinaldo
+CALL sp_registrar_prestacion_empleado(@nuevo_id, 2, @fecha_bono14);   -- Bono 14
+
 
   ELSEIF p_accion = 'ACTUALIZAR' THEN
     UPDATE Empleados
@@ -1295,19 +1487,6 @@ END $$
 
 DELIMITER ;
 
-DELIMITER $$
-
-CREATE PROCEDURE sp_eliminar_dias_mes_actual (
-  IN p_id_empleado INT
-)
-BEGIN
-  DELETE FROM DiasTrabajados
-  WHERE id_empleado = p_id_empleado
-    AND MONTH(fecha) = MONTH(CURDATE())
-    AND YEAR(fecha) = YEAR(CURDATE());
-END $$
-
-DELIMITER ;
 
 DELIMITER $$
 
@@ -1333,6 +1512,688 @@ BEGIN
   JOIN PuestoDepartamento pd ON p.id_puesto = pd.id_puesto
   WHERE pd.id_departamento = p_id_departamento;
 END $$
+
+DELIMITER ;
+
+
+
+
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_calcular_rango_nomina (
+  IN p_id_empleado INT,
+  IN p_id_tipo_nomina INT, -- 1 mensual, 2 quincenal, 3 semanal
+  IN p_mes INT,
+  IN p_anio INT,
+  OUT p_fecha_inicio DATE,
+  OUT p_fecha_fin DATE,
+  OUT p_es_ultima_parte TINYINT -- 1 si es la última quincena o semana
+)
+BEGIN
+  DECLARE v_dia_inicio DATE;
+  DECLARE v_ultimo_dia_mes DATE;
+  DECLARE v_cuantas INT;
+
+  SET v_dia_inicio = MAKEDATE(p_anio, 1) + INTERVAL (p_mes - 1) MONTH;
+  SET v_ultimo_dia_mes = LAST_DAY(v_dia_inicio);
+
+  IF p_id_tipo_nomina = 1 THEN
+    -- Mensual
+    SET p_fecha_inicio = v_dia_inicio;
+    SET p_fecha_fin = v_ultimo_dia_mes;
+    SET p_es_ultima_parte = 1;
+
+  ELSEIF p_id_tipo_nomina = 2 THEN
+    -- Quincenal
+    SELECT COUNT(*) INTO v_cuantas
+    FROM Nominas
+    WHERE id_empleado = p_id_empleado
+      AND MONTH(fecha_inicio) = p_mes
+      AND YEAR(fecha_inicio) = p_anio
+      AND id_tipo_nomina = 2;
+
+    IF v_cuantas = 0 THEN
+      SET p_fecha_inicio = v_dia_inicio;
+      SET p_fecha_fin = DATE_ADD(v_dia_inicio, INTERVAL 14 DAY);
+      SET p_es_ultima_parte = 0;
+    ELSEIF v_cuantas = 1 THEN
+      SET p_fecha_inicio = DATE_ADD(v_dia_inicio, INTERVAL 15 DAY);
+      SET p_fecha_fin = v_ultimo_dia_mes;
+      SET p_es_ultima_parte = 1;
+    ELSE
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Este mes ya tiene ambas quincenas generadas.';
+    END IF;
+
+  ELSEIF p_id_tipo_nomina = 3 THEN
+    -- Semanal dinámica (hasta alcanzar el último día del mes)
+    SELECT COUNT(*) INTO v_cuantas
+    FROM Nominas
+    WHERE id_empleado = p_id_empleado
+      AND MONTH(fecha_inicio) = p_mes
+      AND YEAR(fecha_inicio) = p_anio
+      AND id_tipo_nomina = 3;
+
+    IF v_cuantas = 0 THEN
+      SET p_fecha_inicio = v_dia_inicio;
+    ELSE
+      SELECT DATE_ADD(MAX(fecha_fin), INTERVAL 1 DAY) INTO p_fecha_inicio
+      FROM Nominas
+      WHERE id_empleado = p_id_empleado
+        AND MONTH(fecha_inicio) = p_mes
+        AND id_tipo_nomina = 3;
+    END IF;
+
+    -- Calcular fin de semana (de lunes a domingo)
+    SET p_fecha_fin = DATE_ADD(p_fecha_inicio, INTERVAL (6 - WEEKDAY(p_fecha_inicio)) DAY);
+
+    -- Si se pasa del mes, recortamos
+    IF p_fecha_fin > v_ultimo_dia_mes THEN
+      SET p_fecha_fin = v_ultimo_dia_mes;
+    END IF;
+
+    -- ¿Contiene esta semana el último día del mes?
+    IF p_fecha_fin = v_ultimo_dia_mes THEN
+      SET p_es_ultima_parte = 1;
+    ELSE
+      SET p_es_ultima_parte = 0;
+    END IF;
+
+  END IF;
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_obtener_departamento_empleado (
+  IN p_id_empleado INT
+)
+BEGIN
+  SELECT id_departamento
+  FROM Empleados
+  WHERE id_empleado = p_id_empleado
+  LIMIT 1;
+END $$
+
+DELIMITER ;
+
+
+
+-- VACACIONES
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_listar_dias_mes (
+  IN p_id_empleado INT,
+  IN p_mes INT,
+  IN p_anio INT
+)
+BEGIN
+  SELECT fecha, tipo
+  FROM DiasTrabajados
+  WHERE id_empleado = p_id_empleado
+    AND MONTH(fecha) = p_mes
+    AND YEAR(fecha) = p_anio;
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_eliminar_dias_mes_actual (
+  IN p_id_empleado INT
+)
+BEGIN
+  -- 1. Eliminar días trabajados del mes actual
+  DELETE FROM DiasTrabajados
+  WHERE id_empleado = p_id_empleado
+    AND MONTH(fecha) = MONTH(CURDATE())
+    AND YEAR(fecha) = YEAR(CURDATE());
+
+-- Eliminar de VacacionesDias cruzando por VacacionesCiclo
+DELETE vd
+FROM VacacionesDias vd
+JOIN VacacionesCiclo vc ON vd.id_ciclo = vc.id_ciclo
+WHERE vc.id_empleado = p_id_empleado
+  AND MONTH(vd.fecha) = MONTH(CURDATE())
+  AND YEAR(vd.fecha) = YEAR(CURDATE());
+
+
+  -- 3. Restar los días eliminados al contador de días usados en el ciclo
+  UPDATE VacacionesCiclo
+  SET dias_usados = dias_usados - (
+    SELECT COUNT(*)
+    FROM VacacionesDias vd
+    WHERE vd.id_ciclo = VacacionesCiclo.id_ciclo
+      AND MONTH(vd.fecha) = MONTH(CURDATE())
+      AND YEAR(vd.fecha) = YEAR(CURDATE())
+  )
+  WHERE id_empleado = p_id_empleado
+    AND anio = YEAR(CURDATE());
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_insertar_dia_calendario (
+  IN p_id_empleado INT,
+  IN p_fecha DATE,
+  IN p_tipo ENUM('Laborado', 'Vacación'),
+  IN p_id_ciclo INT,
+  IN p_observacion VARCHAR(100)
+)
+BEGIN
+  DECLARE v_usados INT;
+  DECLARE v_maximos INT;
+  DECLARE v_ciclo_actual INT;
+  DECLARE v_anio INT;
+
+  SET v_anio = YEAR(p_fecha);
+
+  --  Si es día de vacación, validar e insertar
+  IF p_tipo = 'Vacación' THEN
+
+    -- Verificar si ya existe ciclo para el año de la fecha
+    SELECT id_ciclo INTO v_ciclo_actual
+    FROM VacacionesCiclo
+    WHERE id_empleado = p_id_empleado AND anio = v_anio
+    LIMIT 1;
+
+    -- Si no existe, crear nuevo ciclo automáticamente
+    IF v_ciclo_actual IS NULL THEN
+      INSERT INTO VacacionesCiclo (id_empleado, anio, dias_asignados)
+      VALUES (p_id_empleado, v_anio, 15);
+
+      SET v_ciclo_actual = LAST_INSERT_ID();
+    END IF;
+
+    -- Verificar si ya existe la fecha
+    IF EXISTS (
+      SELECT 1 FROM VacacionesDias
+      WHERE id_empleado = p_id_empleado AND fecha = p_fecha
+    ) THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Ya existe esa fecha registrada como vacación.';
+    END IF;
+
+    -- Verificar límite de días disponibles
+    SELECT dias_usados, dias_asignados INTO v_usados, v_maximos
+    FROM VacacionesCiclo
+    WHERE id_ciclo = v_ciclo_actual AND id_empleado = p_id_empleado;
+
+    IF v_usados >= v_maximos THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Ya usó todos los días de vacaciones asignados.';
+    END IF;
+
+    -- Insertar día en tabla de vacaciones
+    INSERT INTO VacacionesDias (id_empleado, fecha, id_ciclo)
+    VALUES (p_id_empleado, p_fecha, v_ciclo_actual);
+
+    -- Actualizar contador de días usados
+    UPDATE VacacionesCiclo
+    SET dias_usados = dias_usados + 1
+    WHERE id_ciclo = v_ciclo_actual;
+  END IF;
+
+  --  Insertar en tabla general de calendario (laborado o vacación)
+  INSERT INTO DiasTrabajados (id_empleado, fecha, tipo, observacion)
+  VALUES (p_id_empleado, p_fecha, p_tipo, p_observacion);
+
+END $$
+
+DELIMITER ;
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_obtener_ciclo_vacaciones (
+  IN p_id_empleado INT
+)
+BEGIN
+  SELECT *
+  FROM VacacionesCiclo
+  WHERE id_empleado = p_id_empleado
+    AND anio = YEAR(CURDATE())
+  LIMIT 1;
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_registrar_prestacion_empleado (
+  IN p_id_empleado INT,
+  IN p_id_prestacion INT,
+  IN p_fecha_aplicacion DATE
+)
+BEGIN
+  DECLARE v_estado INT;
+
+  -- Validar que el empleado existe y está activo
+  SELECT id_estado INTO v_estado FROM Empleados WHERE id_empleado = p_id_empleado;
+
+  IF v_estado != 1 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'El empleado no está activo.';
+  END IF;
+
+  -- Insertar prestación sin calcular monto aún
+  INSERT INTO PrestacionEmpleado (id_prestacion, id_empleado, fecha_aplicacion, monto)
+  VALUES (p_id_prestacion, p_id_empleado, p_fecha_aplicacion, NULL);
+END $$
+
+DELIMITER ;
+
+
+
+
+-- Indemnizacion
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_calcular_liquidacion_despido (
+  IN p_id_empleado INT,
+  IN p_fecha_despido DATE
+)
+BEGIN
+  DECLARE v_salario_promedio DECIMAL(10,2);
+  DECLARE v_salario_base DECIMAL(10,2);
+  DECLARE v_total_sueldo_base DECIMAL(10,2) DEFAULT 0;
+  DECLARE v_total_meses_salario INT DEFAULT 0;
+  DECLARE v_meses_trabajados_total INT;
+  DECLARE v_anios_completos INT;
+  DECLARE v_meses_residuales INT;
+  DECLARE v_fecha_contratacion DATE;
+
+  DECLARE v_dias_no_gozados INT DEFAULT 0;
+  DECLARE v_total_vacaciones DECIMAL(10,2);
+
+  DECLARE v_aguinaldo DECIMAL(10,2);
+  DECLARE v_bono14 DECIMAL(10,2);
+  DECLARE v_horas_extra DECIMAL(10,2);
+  DECLARE v_indemnizacion DECIMAL(10,2);
+  DECLARE v_total_liquidacion DECIMAL(10,2);
+
+  DECLARE v_fecha_ultimo_aguinaldo DATE;
+  DECLARE v_fecha_ultimo_bono14 DATE;
+  DECLARE v_existente INT;
+
+  -- 0. Verificar si ya existe una liquidación para este empleado en esa fecha
+  SELECT COUNT(*) INTO v_existente
+  FROM Liquidaciones
+  WHERE id_empleado = p_id_empleado
+    AND fecha_despido = p_fecha_despido;
+
+  IF v_existente > 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Ya existe una liquidación para este empleado en esta fecha.';
+  END IF;
+
+  -- 1. Fecha contratación y salario base
+  SELECT fecha_contratacion, salario_base
+  INTO v_fecha_contratacion, v_salario_base
+  FROM Empleados
+  WHERE id_empleado = p_id_empleado;
+
+  -- 2. Salario promedio mensual (últimos 6 meses)
+  SELECT IFNULL(SUM(nd.monto), 0), COUNT(*) INTO v_total_sueldo_base, v_total_meses_salario
+  FROM NominaDetalles nd
+  JOIN Nominas n ON nd.id_nomina = n.id_nomina
+  WHERE nd.concepto = 'Sueldo base'
+    AND n.id_empleado = p_id_empleado
+    AND n.id_tipo_nomina = 1
+    AND n.fecha_inicio >= DATE_SUB(p_fecha_despido, INTERVAL 6 MONTH);
+
+  SELECT IFNULL(SUM(x.total), 0), COUNT(*) INTO @sum_quincena, @cnt_quincena FROM (
+    SELECT SUM(nd.monto) AS total
+    FROM NominaDetalles nd
+    JOIN Nominas n ON nd.id_nomina = n.id_nomina
+    WHERE nd.concepto = 'Sueldo base'
+      AND n.id_empleado = p_id_empleado
+      AND n.id_tipo_nomina = 2
+      AND n.fecha_inicio >= DATE_SUB(p_fecha_despido, INTERVAL 6 MONTH)
+    GROUP BY YEAR(n.fecha_inicio), MONTH(n.fecha_inicio)
+  ) x;
+
+  SET v_total_sueldo_base = v_total_sueldo_base + IFNULL(@sum_quincena, 0);
+  SET v_total_meses_salario = v_total_meses_salario + IFNULL(@cnt_quincena, 0);
+
+  SELECT IFNULL(SUM(x.total), 0), COUNT(*) INTO @sum_semanal, @cnt_semanal FROM (
+    SELECT SUM(nd.monto) AS total
+    FROM NominaDetalles nd
+    JOIN Nominas n ON nd.id_nomina = n.id_nomina
+    WHERE nd.concepto = 'Sueldo base'
+      AND n.id_empleado = p_id_empleado
+      AND n.id_tipo_nomina = 3
+      AND n.fecha_inicio >= DATE_SUB(p_fecha_despido, INTERVAL 6 MONTH)
+    GROUP BY YEAR(n.fecha_inicio), MONTH(n.fecha_inicio)
+  ) x;
+
+  SET v_total_sueldo_base = v_total_sueldo_base + IFNULL(@sum_semanal, 0);
+  SET v_total_meses_salario = v_total_meses_salario + IFNULL(@cnt_semanal, 0);
+
+  SET v_salario_promedio = ROUND(v_total_sueldo_base / GREATEST(v_total_meses_salario, 1), 2);
+
+  -- 3. Tiempo trabajado
+  SET v_anios_completos = TIMESTAMPDIFF(YEAR, v_fecha_contratacion, p_fecha_despido);
+  SET v_meses_trabajados_total = TIMESTAMPDIFF(MONTH, v_fecha_contratacion, p_fecha_despido);
+  SET v_meses_residuales = v_meses_trabajados_total - (v_anios_completos * 12);
+
+  -- 4. Indemnización legal
+  SET v_indemnizacion = ROUND(v_salario_promedio * v_anios_completos + (v_salario_promedio * v_meses_residuales / 12), 2);
+
+  -- 5. Vacaciones no gozadas
+  SELECT IFNULL(SUM(dias_asignados - dias_usados), 0) INTO v_dias_no_gozados
+  FROM VacacionesCiclo
+  WHERE id_empleado = p_id_empleado
+    AND anio BETWEEN YEAR(v_fecha_contratacion) AND YEAR(p_fecha_despido);
+
+  SET v_total_vacaciones = ROUND((v_dias_no_gozados / 30) * v_salario_base, 2);
+
+  -- 6. Aguinaldo proporcional (desde 15 dic anterior)
+  SET v_fecha_ultimo_aguinaldo = STR_TO_DATE(CONCAT(YEAR(p_fecha_despido) - IF(MONTH(p_fecha_despido) < 12, 1, 0), '-12-15'), '%Y-%m-%d');
+  SET v_aguinaldo = ROUND(LEAST(DATEDIFF(p_fecha_despido, v_fecha_ultimo_aguinaldo), 365) / 365 * v_salario_base, 2);
+
+  -- 7. Bono 14 proporcional (desde 15 jul anterior)
+  SET v_fecha_ultimo_bono14 = STR_TO_DATE(CONCAT(YEAR(p_fecha_despido) - IF(MONTH(p_fecha_despido) < 7, 1, 0), '-07-15'), '%Y-%m-%d');
+  SET v_bono14 = ROUND(LEAST(DATEDIFF(p_fecha_despido, v_fecha_ultimo_bono14), 365) / 365 * v_salario_base, 2);
+
+-- 8. Horas extras no pagadas del mes actual
+SET @inicio_mes = DATE_FORMAT(p_fecha_despido, '%Y-%m-01');
+
+-- ¿Ya se pagaron horas extra en una nómina del mismo rango?
+SELECT COUNT(*) INTO @pagadas
+FROM NominaDetalles nd
+JOIN Nominas n ON nd.id_nomina = n.id_nomina
+WHERE n.id_empleado = p_id_empleado
+  AND nd.concepto = 'Horas extras'
+  AND n.fecha_inicio >= @inicio_mes
+  AND n.fecha_fin <= p_fecha_despido;
+
+IF @pagadas = 0 THEN
+  SELECT IFNULL(SUM(horas * montoporhora), 0) INTO v_horas_extra
+  FROM HorasExtras
+  WHERE id_empleado = p_id_empleado
+    AND fecha BETWEEN @inicio_mes AND p_fecha_despido;
+ELSE
+  SET v_horas_extra = 0;
+END IF;
+
+
+  -- 9. Total de la liquidación
+  SET v_total_liquidacion = ROUND(
+    v_indemnizacion + v_total_vacaciones + v_aguinaldo + v_bono14 + v_horas_extra, 2
+  );
+
+  -- 10. Insertar resultado
+  INSERT INTO Liquidaciones (
+    id_empleado, fecha_despido, salario_promedio, anios_completos, meses,
+    indemnizacion, dias_no_gozados, vacaciones_pendientes,
+    aguinaldo_proporcional, bono14_proporcional, horas_extra_mes, total_liquidacion
+  ) VALUES (
+    p_id_empleado, p_fecha_despido, v_salario_promedio, v_anios_completos, v_meses_residuales,
+    v_indemnizacion, v_dias_no_gozados, v_total_vacaciones,
+    v_aguinaldo, v_bono14, v_horas_extra, v_total_liquidacion
+  );
+
+  -- 11. Mostrar al final
+  SELECT
+    v_salario_promedio AS salario_promedio,
+    v_anios_completos AS anios_completos,
+    v_meses_residuales AS meses,
+    v_indemnizacion AS indemnizacion,
+    v_dias_no_gozados AS dias_no_gozados,
+    v_total_vacaciones AS vacaciones_pendientes,
+    v_aguinaldo AS aguinaldo_proporcional,
+    v_bono14 AS bono14_proporcional,
+    v_horas_extra AS horas_extra_mes,
+    v_total_liquidacion AS total_liquidacion;
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_listar_liquidaciones()
+BEGIN
+  SELECT 
+    l.id_liquidacion,
+    l.id_empleado,
+    CONCAT(e.nombres, ' ', e.apellidos) AS nombre_completo,
+    l.fecha_despido,
+    l.salario_promedio,
+    l.anios_completos,
+    l.meses,
+    l.indemnizacion,
+    l.vacaciones_pendientes,
+    l.aguinaldo_proporcional,
+    l.bono14_proporcional,
+    l.horas_extra_mes,
+    l.total_liquidacion,
+    l.fecha_registro
+  FROM Liquidaciones l
+  JOIN Empleados e ON l.id_empleado = e.id_empleado
+  ORDER BY l.fecha_registro DESC;
+END $$
+
+DELIMITER ;
+
+
+
+
+
+DELIMITER $$
+CREATE PROCEDURE sp_gestion_usuario(
+  IN p_accion     VARCHAR(10),
+  IN p_id_usuario INT,
+  IN p_username   VARCHAR(50),
+  IN p_password   VARCHAR(255),
+  IN p_id_rol     INT
+)
+BEGIN
+  IF p_accion = 'LISTAR' THEN
+    SELECT u.id_usuario, u.username, u.id_rol, r.nombre_rol AS rol
+      FROM Usuarios u
+      JOIN Roles r ON u.id_rol = r.id_rol;
+
+  ELSEIF p_accion = 'OBTENER' THEN
+    SELECT u.id_usuario, u.username, u.id_rol, r.nombre_rol AS rol
+      FROM Usuarios u
+      JOIN Roles r ON u.id_rol = r.id_rol
+     WHERE u.id_usuario = p_id_usuario;
+
+  ELSEIF p_accion = 'INSERTAR' THEN
+    INSERT INTO Usuarios(username,password,id_rol)
+      VALUES(p_username,p_password,p_id_rol);
+    SELECT LAST_INSERT_ID() AS id_usuario;
+
+
+  ELSEIF p_accion = 'ACTUALIZAR' THEN
+    IF p_password IS NOT NULL AND p_password <> '' THEN
+      UPDATE Usuarios
+        SET username=p_username, password=p_password, id_rol=p_id_rol
+       WHERE id_usuario=p_id_usuario;
+    ELSE
+      UPDATE Usuarios
+        SET username=p_username, id_rol=p_id_rol
+       WHERE id_usuario=p_id_usuario;
+    END IF;
+    SELECT ROW_COUNT() AS afectados;
+
+  ELSEIF p_accion = 'ELIMINAR' THEN
+    DELETE FROM Usuarios WHERE id_usuario = p_id_usuario;
+    SELECT ROW_COUNT() AS afectados;
+  END IF;
+END$$
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_listar_roles()
+BEGIN
+  SELECT id_rol, nombre_rol FROM Roles;
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_buscar_nominas_por_empleado (
+  IN p_termino VARCHAR(100)
+)
+BEGIN
+  SELECT 
+    n.fecha_nomina,
+    t.tipo AS tipo_nomina,
+    e.id_empleado,
+    e.nombres,
+    e.apellidos,
+    en.estado AS estado_nomina,
+    COUNT(nd.id_nomina_detalle) AS empleados_incluidos,
+    n.id_tipo_nomina
+  FROM Nominas n
+  JOIN Empleados e ON n.id_empleado = e.id_empleado
+  JOIN EstadoNomina en ON n.id_estado = en.id_estado
+  JOIN TipoNomina t ON n.id_tipo_nomina = t.id_tipo_nomina
+  LEFT JOIN NominaDetalles nd ON nd.id_nomina = n.id_nomina
+  WHERE CONCAT(e.nombres, ' ', e.apellidos) LIKE CONCAT('%', p_termino, '%')
+     OR e.dpi LIKE CONCAT('%', p_termino, '%')
+  GROUP BY n.id_nomina
+  ORDER BY n.fecha_nomina DESC;
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_listar_nominas_por_empleado (
+  IN p_id_empleado INT
+)
+BEGIN
+  SELECT 
+    n.id_nomina,
+    n.fecha_nomina,
+    t.tipo AS tipo_nomina,
+    en.estado AS estado_nomina,
+    n.id_tipo_nomina
+  FROM Nominas n
+  JOIN TipoNomina t ON n.id_tipo_nomina = t.id_tipo_nomina
+  JOIN EstadoNomina en ON n.id_estado = en.id_estado
+  WHERE n.id_empleado = p_id_empleado
+  ORDER BY n.fecha_nomina DESC;
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_obtener_liquidacion_por_id(IN p_id_liquidacion INT)
+BEGIN
+  SELECT 
+    l.*, 
+    CONCAT(e.nombres, ' ', e.apellidos) AS nombre_completo
+  FROM Liquidaciones l
+  JOIN Empleados e ON l.id_empleado = e.id_empleado
+  WHERE l.id_liquidacion = p_id_liquidacion;
+END $$
+
+DELIMITER ;
+
+-- Empleados con más horas extra por mes
+DELIMITER $$
+
+CREATE PROCEDURE sp_empleados_mas_horas_extra(IN p_mes INT, IN p_anio INT)
+BEGIN
+  SELECT 
+    e.id_empleado,
+    CONCAT(e.nombres, ' ', e.apellidos) AS nombre_empleado,
+    SUM(h.horas) AS total_horas
+  FROM HorasExtras h
+  JOIN Empleados e ON e.id_empleado = h.id_empleado
+  WHERE MONTH(h.fecha) = p_mes AND YEAR(h.fecha) = p_anio
+  GROUP BY e.id_empleado
+  ORDER BY total_horas DESC
+  LIMIT 5;
+END $$
+
+DELIMITER ;
+
+
+-- Departamentos con más gasto en nómina por mes
+DELIMITER $$
+
+CREATE PROCEDURE sp_gasto_nomina_por_departamento(IN p_mes INT, IN p_anio INT)
+BEGIN
+  SELECT 
+    d.nombre_departamento,
+    SUM(n.salario_neto) AS total_gasto
+  FROM Nominas n
+  JOIN Departamentos d ON n.id_departamento = d.id_departamento
+  WHERE MONTH(n.fecha_nomina) = p_mes AND YEAR(n.fecha_nomina) = p_anio
+  GROUP BY d.id_departamento
+  ORDER BY total_gasto DESC;
+END $$
+
+DELIMITER ;
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_generar_planilla (
+  IN p_mes INT,
+  IN p_anio INT,
+  IN p_id_tipo_nomina INT,
+  IN p_id_departamento INT -- NULL para todos
+)
+BEGIN
+  SELECT 
+    e.id_empleado,
+    CONCAT(e.nombres, ' ', e.apellidos) AS nombre_completo,
+    e.dpi,
+    p.nombre_puesto,
+    d.nombre_departamento,
+    n.fecha_nomina,
+    n.fecha_inicio,
+    n.fecha_fin,
+    n.salario_bruto,
+    n.deducciones,
+    n.salario_neto
+  FROM Nominas n
+  JOIN Empleados e ON e.id_empleado = n.id_empleado
+  JOIN Puestos p ON p.id_puesto = e.id_puesto
+  JOIN Departamentos d ON d.id_departamento = e.id_departamento
+  WHERE MONTH(n.fecha_nomina) = p_mes
+    AND YEAR(n.fecha_nomina) = p_anio
+    AND n.id_tipo_nomina = p_id_tipo_nomina
+    AND n.id_estado = 1 -- Solo planillas generadas
+    AND (p_id_departamento IS NULL OR n.id_departamento = p_id_departamento);
+END$$
+
+DELIMITER ;
+
+
+ DELIMITER $$
+
+CREATE PROCEDURE sp_detalle_planilla_por_nomina (
+  IN p_id_nomina INT
+)
+BEGIN
+  SELECT concepto, monto, tipo
+  FROM NominaDetalles
+  WHERE id_nomina = p_id_nomina;
+END$$
 
 DELIMITER ;
 

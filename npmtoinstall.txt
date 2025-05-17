@@ -1,0 +1,8 @@
+BACKEND:
+npm install pdfkit
+npm install xlsx
+
+
+FRONTEND:
+npm install chart.js react-chartjs-2   
+npm install sweetalert2     

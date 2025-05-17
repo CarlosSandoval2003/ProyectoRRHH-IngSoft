@@ -1,33 +1,47 @@
-// backend/models/mantenimientousuarioModel.js
 const db = require('../config/db');
 
-class MantenimientoUsuarioModel {
-  static callSP(accion, id_usuario = null, username = null, password = null, id_rol = null) {
-    return new Promise((resolve, reject) => {
-      db.query(
-        'CALL sp_gestion_usuario(?,?,?,?,?)',
-        [accion, id_usuario, username, password, id_rol],
-        (err, resultSets) => {
-          if (err) return reject(err);
+const MantenimientoUsuarioModel = {};
 
-          // mysql2 en modo callback suele devolver:
-          // resultSets = [ rowsArray, ... ]
-          // donde rowsArray = [ {…}, {…}, … ]
-          const filas = Array.isArray(resultSets[0])
-            ? resultSets[0]
-            : resultSets;
+MantenimientoUsuarioModel.listarUsuarios = (callback) => {
+  db.query('CALL sp_gestion_usuario("LISTAR", NULL, NULL, NULL, NULL)', (err, results) => {
+    if (err) return callback(err);
+    callback(null, results[0]);
+  });
+};
 
-          resolve(filas);
-        }
-      );
-    });
-  }
+MantenimientoUsuarioModel.obtenerUsuario = (id, callback) => {
+  db.query('CALL sp_gestion_usuario("OBTENER", ?, NULL, NULL, NULL)', [id], (err, results) => {
+    if (err) return callback(err);
+    callback(null, results[0][0]);
+  });
+};
 
-  static list()    { return this.callSP('LISTAR'); }
-  static getById(id)   { return this.callSP('OBTENER', id); }
-  static create(d)     { return this.callSP('INSERTAR', null, d.username, d.password, d.id_rol); }
-  static update(d)     { return this.callSP('ACTUALIZAR', d.id_usuario, d.username, d.password, d.id_rol); }
-  static delete(id)    { return this.callSP('ELIMINAR', id); }
-}
+MantenimientoUsuarioModel.insertarUsuario = (username, password, id_rol, callback) => {
+  db.query('CALL sp_gestion_usuario("INSERTAR", NULL, ?, ?, ?)', [username, password, id_rol], (err, results) => {
+    if (err) return callback(err);
+    callback(null, results[0][0]);
+  });
+};
+
+MantenimientoUsuarioModel.actualizarUsuario = (id, username, password, id_rol, callback) => {
+  db.query('CALL sp_gestion_usuario("ACTUALIZAR", ?, ?, ?, ?)', [id, username, password, id_rol], (err, results) => {
+    if (err) return callback(err);
+    callback(null, results[0][0]);
+  });
+};
+
+MantenimientoUsuarioModel.eliminarUsuario = (id, callback) => {
+  db.query('CALL sp_gestion_usuario("ELIMINAR", ?, NULL, NULL, NULL)', [id], (err, results) => {
+    if (err) return callback(err);
+    callback(null, results[0][0]);
+  });
+};
+
+MantenimientoUsuarioModel.listarRoles = (callback) => {
+  db.query('CALL sp_listar_roles()', (err, results) => {
+    if (err) return callback(err);
+    callback(null, results[0]);
+  });
+};
 
 module.exports = MantenimientoUsuarioModel;

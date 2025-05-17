@@ -1,7 +1,15 @@
-// src/pages/Dashboard.jsx
+import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { useNavigate }        from 'react-router-dom';
 import './Dashboard.css';
+
+// ✅ Renombrado para evitar conflicto
+const opcionesIniciales = [
+  { nombre: 'Empleados', ruta: '/empleados', color: '#2196F3', icon: '👤' },
+  { nombre: 'Nómina', ruta: '/nomina', color: '#4CAF50', icon: '💸' },
+  { nombre: 'Liquidaciones', ruta: '/liquidaciones', color: '#F44336', icon: '📑' },
+  { nombre: 'Reportes', ruta: '/reportes', color: '#FF9800', icon: '📊' },
+  { nombre: 'Historial', ruta: '/historial', color: '#9C27B0', icon: '🕓' }
+];
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -23,34 +31,37 @@ export default function Dashboard() {
   const isAdmin = user.rol === 'Administrador';
   const isRH    = user.rol === 'Recursos Humanos';
 
-  // Definimos todas las opciones posibles
-  const todasOpciones = [
-    { nombre: 'Empleados', ruta: '/empleados', color: '#2196F3', icon: '👤' },
-    { nombre: 'Nómina',     ruta: '/nomina',    color: '#4CAF50', icon: '💸' },
-    { nombre: 'Reportes',   ruta: '/reportes',  color: '#FF9800', icon: '📊' },
-    { nombre: 'Historial',  ruta: '/historial', color: '#9C27B0', icon: '🕓' },
-  ];
-
-  // Construimos el array final según rol
+  const todasOpciones = [...opcionesIniciales];
   let opciones = [];
 
   if (isAdmin) {
-    // Admin ve TODO + mantenimiento
     opciones = [
       ...todasOpciones,
       { nombre: 'Mantenimiento Usuarios', ruta: '/usuarios', color: '#FF5722', icon: '🛠' }
     ];
   } else if (isRH) {
-    // RRHH ve todo menos 'Historial'
     opciones = todasOpciones.filter(op => op.nombre !== 'Historial');
   } else {
-    // Otros roles (por si acaso) solo ven Dashboard
     opciones = [];
   }
+
+  const cerrarSesion = () => {
+    localStorage.removeItem('user');
+    navigate('/');
+  };
 
   return (
     <div className="dashboard">
       <h1>Bienvenido, {user.username} ({user.rol})</h1>
+
+      <button
+        onClick={cerrarSesion}
+        className="btn btn-delete"
+        style={{ marginBottom: '20px', backgroundColor: '#d32f2f' }}
+      >
+        🚪 Cerrar Sesión
+      </button>
+
       <div className="grid">
         {opciones.map((op, i) => (
           <div

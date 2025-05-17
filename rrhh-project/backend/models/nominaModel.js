@@ -36,9 +36,10 @@ NominaModel.obtenerTiposNomina = (callback) => {
 };
 
 NominaModel.generarNominaEmpleado = (params, callback) => {
-  const query = "CALL sp_generar_nomina_empleado(?, ?, ?, ?, ?, ?)";
+  const query = "CALL sp_generar_nomina_empleado(?, ?, ?, ?, ?, ?, ?)";
   db.query(query, params, callback);
 };
+
 
 NominaModel.obtenerListadoNominas = (callback) => {
   const query = "CALL sp_listado_nominas_generadas()";
@@ -47,6 +48,15 @@ NominaModel.obtenerListadoNominas = (callback) => {
     callback(null, results[0]);
   });
 };
+
+NominaModel.obtenerDepartamentoEmpleado = (id_empleado, callback) => {
+  const query = "CALL sp_obtener_departamento_empleado(?)";
+  db.query(query, [id_empleado], (err, results) => {
+    if (err) return callback(err);
+    callback(null, results[0]);
+  });
+};
+
 
 NominaModel.generarNominaTodos = (params, callback) => {
   const query = "CALL sp_generar_nomina_todos(?, ?, ?, ?, ?)";
@@ -90,6 +100,22 @@ NominaModel.obtenerDepartamentos = (callback) => {
 NominaModel.obtenerEmpleadosPorDepartamento = (id_departamento, callback) => {
   const query = "CALL sp_empleados_por_departamento(?)";
   db.query(query, [id_departamento], (err, results) => {
+    if (err) return callback(err);
+    callback(null, results[0]);
+  });
+};
+
+NominaModel.buscarNominasPorEmpleado = (termino, callback) => {
+  const query = "CALL sp_buscar_nominas_por_empleado(?)";
+  db.query(query, [termino], (err, results) => {
+    if (err) return callback(err);
+    callback(null, results[0]);
+  });
+};
+
+NominaModel.obtenerNominasPorEmpleado = (id_empleado, callback) => {
+  const query = "CALL sp_listar_nominas_por_empleado(?)";
+  db.query(query, [id_empleado], (err, results) => {
     if (err) return callback(err);
     callback(null, results[0]);
   });

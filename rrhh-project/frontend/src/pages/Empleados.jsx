@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import './Empleados.css';
 
 export default function Empleados() {
@@ -13,17 +14,51 @@ export default function Empleados() {
       .then(res => setEmpleados(res.data));
   }, []);
 
-  const eliminarEmpleado = async (id) => {
-    if (window.confirm('¿Estás seguro de eliminar este empleado?')) {
-      try {
-        await axios.delete(`http://localhost:3001/api/empleados/${id}`);
-        setEmpleados(empleados.filter(e => e.id_empleado !== id));
-      } catch (err) {
-        console.error('❌ Error al eliminar:', err);
-        alert('❌ No se pudo eliminar.');
-      }
+const eliminarEmpleado = async (id) => {
+  const { isConfirmed, isDismissed, value } = await Swal.fire({
+    title: '¿Deseas generar la indemnización?',
+    showDenyButton: true,
+    showCancelButton: true,
+    confirmButtonText: 'Sí',
+    denyButtonText: 'No',
+    cancelButtonText: 'Cancelar',
+  });
+
+  if (isDismissed) return; // cancelado
+
+  if (value) {
+    if (value) {
+  try {
+    const fechaHoy = new Date().toISOString().split('T')[0];
+    await axios.post(`http://localhost:3001/api/indemnizacion/generar/${id}`, {
+      fecha_despido: fechaHoy
+    });
+
+    await axios.delete(`http://localhost:3001/api/empleados/${id}`);
+    Swal.fire('✅ Indemnización generada', 'El empleado fue inactivado y su liquidación calculada.', 'success');
+    navigate('/liquidaciones');
+  } catch (err) {
+    console.error('❌ Error generando liquidación:', err);
+    Swal.fire('❌ Error', err.response?.data?.error || 'No se pudo generar la liquidación.', 'error');
+  }
+}
+
+
+  }
+
+  if (isConfirmed === false) {
+    // Si elige "No", inactivar empleado
+    try {
+      await axios.delete(`http://localhost:3001/api/empleados/${id}`);
+      setEmpleados(empleados.filter(e => e.id_empleado !== id));
+      Swal.fire('✅ Empleado inactivado', '', 'success');
+    } catch (err) {
+      console.error('❌ Error al cambiar estado del empleado:', err);
+      Swal.fire('❌ Error al inactivar', 'No se pudo actualizar el estado del empleado.', 'error');
     }
-  };
+  }
+};
+
 
   const empleadosFiltrados = empleados.filter(e =>
     e.nombre_completo.toLowerCase().includes(filtro.toLowerCase())
@@ -33,7 +68,7 @@ export default function Empleados() {
     <div className="contenedor-empleados">
       <div className="botonera-superior">
       <button className="btn volver" onClick={() => navigate('/dashboard')}>🔙 Volver</button>
-        <button className="btn inicio" onClick={() => navigate('/')}>🏠 Inicio</button>
+        <button className="btn inicio" onClick={() => navigate('/dashboard')}>🏠 Inicio</button>
       </div>
 
       <h2 className="titulo">Gestión de Empleados</h2>
