@@ -73,8 +73,15 @@ CREATE TABLE VacacionesDias (
   FOREIGN KEY (id_ciclo) REFERENCES VacacionesCiclo(id_ciclo)
 );
 
-
-
+CREATE TABLE IncentivosEmpleado (
+  id_incentivo INT AUTO_INCREMENT PRIMARY KEY,
+  id_empleado INT NOT NULL,
+  monto DECIMAL(10,2) NOT NULL,
+  esta_activo BOOLEAN NOT NULL DEFAULT TRUE,
+  fecha_creacion DATETIME DEFAULT NOW(),
+  FOREIGN KEY (id_empleado) REFERENCES Empleados(id_empleado)
+);
+    
 
 CREATE TABLE EstadoNomina (
     id_estado INT AUTO_INCREMENT PRIMARY KEY,
@@ -667,6 +674,8 @@ BEGIN
   DECLARE v_total_dias_mes INT;
   DECLARE v_pago_diario DECIMAL(10,4);
   DECLARE v_total_horas_extra DECIMAL(10,2) DEFAULT 0.00;
+  DECLARE v_bono_incentivo DECIMAL(10,2) DEFAULT 0.00;
+
 
   DECLARE cur_fecha DATE;
   DECLARE cur_id_prestacion INT;
@@ -721,6 +730,23 @@ BEGIN
   ) VALUES (
     p_id_nomina, NULL, 'Sueldo base', v_pago_sueldo, 'Ingreso'
   );
+
+-- 2.5 Verificar si el empleado tiene bono incentivo activo
+SELECT monto
+INTO v_bono_incentivo
+FROM IncentivosEmpleado
+WHERE id_empleado = p_id_empleado AND esta_activo = 1
+LIMIT 1;
+
+-- Insertar Bono si existe
+IF v_bono_incentivo IS NOT NULL AND v_bono_incentivo > 0 THEN
+  INSERT INTO NominaDetalles (
+    id_nomina, id_impuesto, concepto, monto, tipo
+  ) VALUES (
+    p_id_nomina, NULL, 'Bono Incentivo', v_bono_incentivo, 'Ingreso'
+  );
+END IF;
+
 
   -- 3. Horas extra
   SELECT IFNULL(SUM(horas * montoporhora), 0) INTO v_total_horas_extra
@@ -2194,6 +2220,65 @@ BEGIN
   FROM NominaDetalles
   WHERE id_nomina = p_id_nomina;
 END$$
+
+DELIMITER ;
+
+
+
+
+-- Bono incentivo
+DELIMITER $$
+
+CREATE PROCEDURE sp_guardar_bono_incentivo (
+  IN p_id_empleado INT,
+  IN p_monto DECIMAL(10,2),
+  IN p_activo BOOLEAN
+)
+BEGIN
+  DECLARE existe INT;
+
+  SELECT COUNT(*) INTO existe
+  FROM IncentivosEmpleado
+  WHERE id_empleado = p_id_empleado;
+
+  IF existe = 0 THEN
+    INSERT INTO IncentivosEmpleado (id_empleado, monto, esta_activo)
+    VALUES (p_id_empleado, p_monto, p_activo);
+  ELSE
+    UPDATE IncentivosEmpleado
+    SET monto = p_monto,
+        esta_activo = p_activo
+    WHERE id_empleado = p_id_empleado;
+  END IF;
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_obtener_bono_incentivo (
+  IN p_id_empleado INT
+)
+BEGIN
+  DECLARE existe_bono INT;
+
+  -- Verifica si ya tiene un registro en IncentivosEmpleado
+  SELECT COUNT(*) INTO existe_bono
+  FROM IncentivosEmpleado
+  WHERE id_empleado = p_id_empleado;
+
+  -- Si NO tiene, lo crea automáticamente con monto 0 e inactivo
+  IF existe_bono = 0 THEN
+    INSERT INTO IncentivosEmpleado (id_empleado, monto, esta_activo)
+    VALUES (p_id_empleado, 0.00, 0);
+  END IF;
+
+  -- Siempre devuelve el registro (nuevo o existente)
+  SELECT monto, esta_activo
+  FROM IncentivosEmpleado
+  WHERE id_empleado = p_id_empleado;
+END $$
 
 DELIMITER ;
 

@@ -20,9 +20,35 @@ const [vacaciones, setVacaciones] = useState([]);
 const [idCicloVacaciones, setIdCicloVacaciones] = useState(null);
 const [mesSeleccionado, setMesSeleccionado] = useState(new Date().getMonth() + 1); // 1 a 12
 const [anioSeleccionado, setAnioSeleccionado] = useState(new Date().getFullYear());
+const [mostrarBono, setMostrarBono] = useState(false);
+const [bonoActivo, setBonoActivo] = useState(false);
+const [bonoMonto, setBonoMonto] = useState(0);
 
 
 
+const cargarBonoIncentivo = async () => {
+  try {
+    const res = await axios.get(`http://localhost:3001/api/empleados/bono-incentivo/${id}`);
+    setBonoActivo(res.data.esta_activo === 1);
+    setBonoMonto(res.data.monto);
+  } catch (err) {
+    console.error("❌ Error al cargar bono:", err);
+  }
+};
+
+const guardarBonoIncentivo = async () => {
+  try {
+    await axios.post(`http://localhost:3001/api/empleados/bono-incentivo/${id}`, {
+      monto: bonoMonto,
+      activo: bonoActivo
+    });
+    alert("✅ Bono guardado correctamente.");
+    setMostrarBono(false);
+  } catch (err) {
+    console.error("❌ Error al guardar bono:", err);
+    alert("❌ Error al guardar bono.");
+  }
+};
 
 const obtenerHistorialHoras = async () => {
   try {
@@ -98,7 +124,16 @@ const agregarHoraExtra = async () => {
         axios.get(`http://localhost:3001/api/empleados/horasextras/${id}`)
         .then(res => setHorasExtras(res.data?.horas_extras_mes ?? 0))
         .catch(err => console.error("❌ Error al obtener horas extras:", err));
-    }, [id]);
+    axios.get(`http://localhost:3001/api/empleados/bono-incentivo/${id}`)
+  .then(res => {
+    setBonoActivo(res.data.esta_activo === 1);
+    setBonoMonto(res.data.monto);
+  })
+  .catch(err => console.error("❌ Error al obtener bono:", err));
+
+    
+    
+      }, [id]);
 
    useEffect(() => {
   if (!mostrarDias) return;
@@ -297,6 +332,39 @@ const agregarHoraExtra = async () => {
     </div>
   </div>
 )}
+{mostrarBono && (
+  <div className="panel-horas-extra">
+    <h3>Bono Incentivo del Empleado</h3>
+    <div style={{ marginBottom: '10px', textAlign: 'center' }}>
+      <label>
+        <input
+          type="checkbox"
+          checked={bonoActivo}
+          onChange={(e) => setBonoActivo(e.target.checked)}
+        /> Activo
+      </label>
+    </div>
+
+    <div style={{ marginBottom: '10px', textAlign: 'center' }}>
+      <input
+        type="number"
+        step="0.01"
+        value={bonoMonto}
+        onChange={(e) => setBonoMonto(parseFloat(e.target.value))}
+        disabled={!bonoActivo}
+        placeholder="Monto del Bono"
+        style={{ width: '150px', padding: '5px' }}
+      />
+    </div>
+
+    <div style={{ textAlign: 'center' }}>
+      <button onClick={guardarBonoIncentivo}>💾 Guardar Bono</button>
+      <button className="btn-volver" onClick={() => setMostrarBono(false)} style={{ marginLeft: '10px' }}>
+        ❌ Cancelar
+      </button>
+    </div>
+  </div>
+)}
 
 
 <div style={{ marginBottom: '10px', textAlign: 'center' }}>
@@ -304,6 +372,15 @@ const agregarHoraExtra = async () => {
     🛠 Gestionar Días Trabajados
   </button>
 </div>
+<div style={{ marginBottom: '10px', textAlign: 'center' }}>
+  <button className="btn-volver" onClick={() => {
+    setMostrarBono(!mostrarBono);
+    if (!mostrarBono) cargarBonoIncentivo();
+  }}>
+    💰 Bono Incentivo
+  </button>
+</div>
+
         
       </div>
     );

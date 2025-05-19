@@ -158,4 +158,26 @@ exports.obtenerCicloVacaciones = async (req, res) => {
 };
 
 
+// GET: obtener bono incentivo
+exports.obtenerBonoIncentivo = async (req, res) => {
+  try {
+    const data = await Empleado.obtenerBonoIncentivo(req.params.id);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// POST: guardar o actualizar bono incentivo
+exports.guardarBonoIncentivo = async (req, res) => {
+  const { monto, activo } = req.body;
+  const id_empleado = req.params.id;
+
+  try {
+    const resultado = await Empleado.guardarBonoIncentivo(id_empleado, monto, activo);
+    res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 

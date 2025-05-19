@@ -106,6 +106,22 @@ obtenerCicloVacaciones: (id_empleado) => new Promise((resolve, reject) => {
 }),
 
 
+// GUARDAR o ACTUALIZAR Bono Incentivo
+guardarBonoIncentivo: (id_empleado, monto, activo) => new Promise((resolve, reject) => {
+  db.query('CALL sp_guardar_bono_incentivo(?, ?, ?)', [id_empleado, monto, activo], (err) => {
+    if (err) return reject(err);
+    resolve({ msg: '✅ Bono incentivo guardado correctamente' });
+  });
+}),
+
+// OBTENER Bono Incentivo
+obtenerBonoIncentivo: (id_empleado) => new Promise((resolve, reject) => {
+  db.query('CALL sp_obtener_bono_incentivo(?)', [id_empleado], (err, results) => {
+    if (err) return reject(err);
+    resolve(results[0][0] || { monto: 0, esta_activo: 0 }); // por si no tiene bono aún
+  });
+}),
+
 
   
   

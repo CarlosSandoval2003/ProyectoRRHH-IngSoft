@@ -31,5 +31,6 @@ router.post('/calendario/:id', empCtrl.guardarDiasCalendarioMesActual);
 router.get('/ciclo-vacaciones/:id', empCtrl.obtenerCicloVacaciones);
 
 
-
+router.get('/bono-incentivo/:id', empCtrl.obtenerBonoIncentivo);
+router.post('/bono-incentivo/:id', empCtrl.guardarBonoIncentivo);
 module.exports = router;
